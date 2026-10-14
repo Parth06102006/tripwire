@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Virtual Environments & Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+
+# Developer scratchpad
+tasks.md
+
+# Build outputs
+dist/
+build/
+.turbo/
+.next/
+out/
+*.tsbuildinfo
+
+# Temporary and test artifacts
+*.tmp
+tmp/
+.coverage
+coverage/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# FalkorDB & Database local data
+falkordb_data/
+*.sqlite3
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
