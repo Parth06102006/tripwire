@@ -5,12 +5,14 @@ description = "TraceAML FalkorDB graph layer: idempotent ingestion and bounded i
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.0",
     "falkordb>=1.0",
     "pyarrow>=17.0",
 ]
 
 [project.scripts]
 traceaml-load-graph = "graph.load_graph:main"
+traceaml-build-graph-features = "graph.feature_stream:main"
 
 [dependency-groups]
 dev = [

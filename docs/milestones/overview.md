@@ -10,6 +10,8 @@ FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-
 
 The FastAPI service now serves the target-free replay alert queue, offline benchmark metrics, and bounded graph investigations. It uses a deterministic threshold policy and evidence verifier. The score artifact contains 761,639 held-out transactions and only transaction ID, timestamp, and score. Endpoint tests cover label exclusion, ranked alerts, validation, and evidence grounding; live API investigation awaits a graph containing the held-out replay cohort.
 
+The point-in-time graph feature builder and optional `lgbm_graph` training arm are implemented. A 50,000-row prefix smoke processed four complete minutes, wrote 43,547 feature rows, and completed in 2.16 seconds with nonzero values in all five features. A full extraction attempt exposed slow two-hop expansion, so that candidate was removed before the full run; the current full feature build is in progress. The feature graph is indexed by account key and remains separate from the transaction-evidence graph.
+
 ## Shared delivery gates
 
 ### Repository foundation
@@ -24,7 +26,7 @@ The FastAPI service now serves the target-free replay alert queue, offline bench
 - [x] Verify HI-Small version 8, license, schema, and source hashes in the local profile and split manifest.
 - [x] Resolve account IDs using bank plus account strings; preserve leading zeroes and the duplicate source account columns by position.
 - [x] Generate past-only behavioral features and validate row/split/hash reconciliation over the frozen chronological split.
-- [ ] Evaluate logistic regression and LightGBM plus LightGBM with graph features on the same frozen cohort. (Transaction-only models are complete; point-in-time graph features remain to be added.)
+- [ ] Complete the full point-in-time feature extraction and compare LightGBM with and without graph features on the frozen test cohort. (The graph feature pipeline and ablation runner are implemented; full extraction and comparison are in progress.)
 
 ### Graph and API
 
@@ -33,11 +35,12 @@ The FastAPI service now serves the target-free replay alert queue, offline bench
 - [ ] Load and benchmark the complete 5,078,345-transaction graph on hardware with sufficient memory.
 - [ ] Serve validated scoring and investigation contracts through FastAPI.
 - [x] Serve a ranked target-free replay queue, benchmark artifacts, deterministic decisions, and verified graph-investigation responses.
+- [ ] Load the held-out replay cohort into the demo graph and verify a live API investigation against FalkorDB.
 - [ ] Preserve deterministic policy and human-confirmed case-memory provenance.
 
 ### Analyst workbench and evidence
 
-- [ ] Present alerts, investigation paths, verified report, and benchmark measurements.
+- [ ] Present alerts, investigation paths, verified report, and benchmark measurements. (API-backed UI wiring is in progress.)
 - [ ] Confirm graph evidence is API output from actual FalkorDB Cypher.
 - [ ] Verify report IDs, paths, amounts, and timestamps against retrieved records.
 - [ ] Label synthetic replay clearly and avoid claims of real-world effectiveness.

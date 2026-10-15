@@ -27,7 +27,7 @@ Own the data protocol, leakage controls, model evaluation, and review of every f
 ### 3. Deliver comparable detection baselines
 
 - Start with a transaction-level logistic regression and LightGBM baseline on identical transaction-local and past-only behavioral features.
-- Add LightGBM plus graph-derived features only after Ashwani publishes feature definitions and scoring-time availability. Use the same frozen rows and labels for every experiment.
+- Use Ashwani's graph feature contract: recent 24-hour distinct in/out counterparties for each endpoint and a prior reverse-flow flag. The feature builder must read no labels or split fields and must exclude same-minute activity. Compare LightGBM with and without these columns on the same frozen rows and labels.
 - Exclude identifiers and targets from features unless their use is explicitly justified, point-in-time safe, and approved in the experiment configuration.
 - Select model settings and thresholds using training and validation data only. Freeze the chosen threshold before opening test results.
 - Save model configuration, feature names, input hashes, split-manifest hash, validation-selected threshold, and test metrics as machine-readable run artifacts.
@@ -61,7 +61,7 @@ Own the data protocol, leakage controls, model evaluation, and review of every f
 - **Complete:** transaction-local and strict past-only features plus logistic regression and LightGBM baselines run on the frozen chronological cohort. The feature table contains no target column; the offline evaluator joins labels separately and only loads test labels after thresholds are fixed. Metrics, thresholds, model configuration, and test scores are in `artifacts/runs/hi-small-v8/baselines/` (local, ignored artifacts). Two clean-directory runs reproduced test scores, metrics, and model files bitwise. On the 761,639-row test split (0.205% positive prevalence), LightGBM average precision is 0.1587; at the validation-selected max-F1 threshold, precision is 23.79%, recall is 24.79%, and F1 is 0.2428. At a predeclared 0.1% alert budget, recall is 15.89% (248 true positives). Logistic regression average precision is 0.0146; it detects no positives in the top 0.1% alert budget.
 - **Caveat:** test prevalence (0.205%) is higher than training (0.080%) and validation (0.100%), indicating temporal distribution shift. These measurements describe this synthetic dataset and protocol only.
 - **Graph checkpoint:** bounded FalkorDB ingestion and investigation queries are implemented and live-smoke-tested. The local 500,000-row chronological prefix takes about 706 MiB in the graph container and loads in 31.3 seconds. The full graph is not loaded on this host; a simple extrapolation is roughly 7 GiB before headroom.
-- **Pending:** add graph-derived point-in-time features and compare LightGBM with and without them on the same frozen test cohort.
+- **In progress:** the separate FalkorDB point-in-time feature builder and optional `lgbm_graph` trainer are implemented. Graph and ML suites pass (45 graph tests; 17 ML tests). A 50,000-row prefix smoke processed four complete minutes and wrote 43,547 target-free feature rows in 2.16 seconds. Two-hop expansion was removed after a full-run timing probe showed it scaled poorly. The full feature sidecar and same-cohort comparison are running/pending.
 - **Not yet measured:** model/service P50/P95 latency, throughput, dollar-weighted recall, and cost methodology.
 
 ## Acceptance evidence
@@ -70,6 +70,6 @@ Iteration 1 evaluation work is complete when:
 
 1. A clean setup can regenerate the source profile, normalized Parquet, and split manifest from the pinned input files.
 2. Automated checks prove split boundaries do not overlap and same-timestamp rows stay together; no future or target-derived data enters features.
-3. Logistic regression and LightGBM share one frozen test cohort and save reproducible configuration and result artifacts; LightGBM plus graph features remains pending the graph feature contract.
+3. Logistic regression, LightGBM, and LightGBM plus point-in-time graph features share one frozen test cohort and save reproducible configuration and result artifacts; the full graph-feature run and ablation remain pending.
 4. Thresholds are selected on validation only, alert-budget definitions are fixed, and currency-weighted metrics follow the documented valuation rule.
 5. Every benchmark claim in the workbench and public materials traces to a saved run artifact and clearly labels the data as synthetic.

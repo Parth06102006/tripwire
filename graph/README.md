@@ -81,3 +81,54 @@ uv run --project graph --group dev ruff check graph
 
 Tests use an in-memory fake graph client at the `graph.query` seam, so they
 never need Docker or the dataset.
+
+## Point-in-time graph features
+
+`traceaml-build-graph-features` streams the normalized Parquet through a
+DuckDB out-of-core sort over exactly four columns
+(`transaction_id`, `timestamp`, `sender_account_key`,
+`receiver_account_key`) into a temporary ignored sorted Parquet, then
+processes complete same-minute groups against a separate aggregate feature
+graph (`traceaml-features`; `FAccount` nodes, one directed `FLOW` edge per
+distinct account pair with `last_epoch`). Features for a minute are queried
+from prior graph state first; the minute applies only afterwards, so
+same-minute peers never observe one another. The main
+transaction-evidence graph is never touched, and labels/splits/patterns are
+never selected.
+
+```sh
+uv run --project graph traceaml-build-graph-features \
+  --parquet data/processed/hi-small-v8/transactions.parquet \
+  --features-out data/processed/hi-small-v8/graph-features.parquet \
+  --manifest-out data/processed/hi-small-v8/graph-features-manifest.json
+```
+
+Smoke (plumbing only; prefix-relative features, never evaluation data):
+
+```sh
+uv run --project graph traceaml-build-graph-features \
+  --parquet data/processed/hi-small-v8/transactions.parquet \
+  --features-out data/interim/traceaml-graph-features/smoke/features.parquet \
+  --manifest-out data/interim/traceaml-graph-features/smoke/manifest.json \
+  --feature-graph traceaml-features-smoke --limit 50000
+```
+
+Aggregate-only preflight without sorting, database, or output:
+
+```sh
+uv run --project graph traceaml-build-graph-features \
+  --parquet data/processed/hi-small-v8/transactions.parquet \
+  --features-out data/interim/traceaml-graph-features/preflight/features.parquet \
+  --manifest-out data/interim/traceaml-graph-features/preflight/manifest.json \
+  --dry-run
+```
+
+Candidate features (`gfeat_` prefix): recent 24-hour distinct
+out/in counterparties for sender and receiver, and a prior reverse-flow indicator. A `FLOW` edge
+is recent-eligible iff `group_epoch - window <= last_epoch < group_epoch`.
+The manifest records the source hash, row counts, window, feature
+definitions, UTC assumption, and proof that target/split were not read.
+FalkorDB must already be running; an existing feature graph is deleted and
+recreated at the start of every build so reruns reproduce identical output.
+The `FAccount.account_key` range index is created before lookups to avoid
+label scans.
