@@ -1,0 +1,8 @@
+"""Global constants for TraceAML API."""
+
+APP_NAME = "TraceAML API"
+APP_VERSION = "0.1.0"
+GRAPH_NAME = "traceaml"
+
+DEFAULT_PAGINATION_LIMIT = 50
+MAX_PAGINATION_LIMIT = 100

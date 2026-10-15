@@ -1,8 +1,7 @@
-"""Graph dependency status probe.
+"""Graph dependency status probe re-export for backwards compatibility."""
 
-Reports only coarse status values. Never returns hosts, ports, credentials,
-dataset labels, or exception text.
-"""
+from api.health.schemas import GraphStatus
+from api.health.service import probe_falkordb as probe_graph
 
 from typing import Any, Literal
 

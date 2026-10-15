@@ -1,4 +1,4 @@
-"""Typed FastAPI application for the TraceAML API service."""
+"""FastAPI entrypoint re-exporting the application from api.main."""
 
 from pathlib import Path
 from typing import Annotated, Any
