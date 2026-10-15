@@ -1,0 +1,101 @@
+{
+  "measured_on": "2026-10-16",
+  "dataset_label": "Synthetic IBM AMLworld HI-Small v8",
+  "hardware": "AMD Ryzen 9 8945HS, 8 cores / 16 threads, 14 GiB system RAM",
+  "graph_scope": "Target-free two-day slice: 998021 transactions and 354660 accounts",
+  "execution_mode": "Serial, one request at a time; no concurrency test",
+  "model_inference": {
+    "single_prepared_row": {
+      "samples": 200,
+      "p50_ms": 0.0291995,
+      "p95_ms": 0.04064215,
+      "mean_ms": 0.03069971
+    },
+    "full_test_cohort": {
+      "rows": 761639,
+      "repeats": 3,
+      "median_seconds": 5.003724045,
+      "transactions_per_second": 152214.4293,
+      "threads": 1,
+      "max_abs_error_vs_saved_scores": 0.0
+    }
+  },
+  "api": {
+    "alerts_limit_50": {
+      "samples": 30,
+      "p50_ms": 1.086583,
+      "p95_ms": 1.719893,
+      "mean_ms": 1.143999667,
+      "serial_requests_per_second": 874.1261
+    },
+    "benchmarks": {
+      "samples": 30,
+      "p50_ms": 1.0816085,
+      "p95_ms": 1.954143,
+      "mean_ms": 1.240093167,
+      "serial_requests_per_second": 806.391
+    },
+    "investigation": {
+      "samples": 12,
+      "p50_ms": 3486.528068,
+      "p95_ms": 3581.872193,
+      "mean_ms": 3498.397216,
+      "serial_requests_per_second": 0.2858452,
+      "graph_query_sum": {
+        "samples": 12,
+        "p50_ms": 3481.392118,
+        "p95_ms": 3576.057232,
+        "mean_ms": 3492.943354
+      },
+      "evidence_transactions": 25,
+      "evidence_accounts": 13,
+      "evidence_paths": 75,
+      "all_reports_validated": true
+    }
+  },
+  "graph_queries": {
+    "trace_funds": {
+      "samples": 12,
+      "p50_ms": 5.464668,
+      "p95_ms": 6.646796,
+      "mean_ms": 5.51875
+    },
+    "inspect_counterparties": {
+      "samples": 12,
+      "p50_ms": 1.191125,
+      "p95_ms": 1.641105,
+      "mean_ms": 1.279073
+    },
+    "fan_out": {
+      "samples": 12,
+      "p50_ms": 1728.081294,
+      "p95_ms": 1840.912303,
+      "mean_ms": 1728.647112,
+      "matches_min": 10,
+      "matches_max": 10
+    },
+    "fan_in": {
+      "samples": 12,
+      "p50_ms": 890.564397,
+      "p95_ms": 943.287338,
+      "mean_ms": 896.215609,
+      "matches_min": 0,
+      "matches_max": 0
+    },
+    "pass_through": {
+      "samples": 12,
+      "p50_ms": 923.417629,
+      "p95_ms": 977.04535,
+      "mean_ms": 924.56033,
+      "matches_min": 0,
+      "matches_max": 0
+    }
+  },
+  "cost": {
+    "external_llm_calls": 0,
+    "external_llm_cost": "none incurred; deterministic report path",
+    "local_compute_cost": "not priced",
+    "cost_per_1000_decisions": "not priced",
+    "dollar_weighted_recall": "not measured; no valuation basis selected"
+  }
+}

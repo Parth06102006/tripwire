@@ -41,9 +41,9 @@ flowchart LR
 
 ## Data and evaluation
 
-Parquet is the analytical source of truth. A profiling and preparation job validates the exact dataset version, records file hashes and schema, normalizes composite account identifiers, and writes a split manifest. Use Polars for transforms, DuckDB for local analytical queries, and PyArrow/Parquet for durable intermediate tables.
+Parquet is the analytical source of truth. The current workspace uses HI-Small Kaggle version 8. `traceaml-inspect-hi-small` writes an aggregate-only source profile; `traceaml-prepare-hi-small` validates and normalizes the transaction file and writes `data/processed/hi-small-v8/transactions.parquet` plus `split-manifest.json`. The manifest records the source hash, schema, composite account-key rule, exact split algorithm, boundaries, and label counts. Use Polars for generic CSV inspection, DuckDB for local analytical queries, and PyArrow/Parquet for durable intermediate tables.
 
-Use a chronological train/validation/test split when the supplied timestamps permit it. Feature construction for transaction `t` may use only information available at or before `t`. Keep labels and typology ground truth in the offline evaluation path. They must not be written to the inference graph or returned by inference queries.
+Use a chronological train/validation/test split when timestamps permit it. HI-Small timestamps have one-minute resolution; choose nearest cumulative-count cutoffs to 70%/85% while keeping each full timestamp group together. Feature construction for transaction `t` may use only records strictly earlier than `t`; records at the same minute are simultaneous. Keep labels and typology ground truth in the offline evaluation path. They must not be written to the inference graph or returned by inference queries.
 
 The first benchmark ladder is logistic regression, LightGBM with tabular and historical behavior features, and LightGBM with the same features plus graph-derived features. Train and tune without reading the frozen test labels, and report all models on the same held-out cohort.
 
@@ -51,13 +51,15 @@ The first benchmark ladder is logistic regression, LightGBM with tabular and his
 
 FalkorDB is the authoritative source for transaction topology and structural investigation evidence. The initial graph contains `Account` and `Transaction` nodes connected by `SENT` and `RECEIVED` relationships. Transaction nodes carry a stable source transaction ID, timestamp, amounts, currencies, and payment type as supported by the input schema. Account keys include institution or bank when account IDs are reused.
 
-The graph layer owns schema, indexes, ingestion, and parameterized Cypher. It exposes bounded operations for fund tracing, counterparty inspection, and selected flow patterns. Every response includes transaction references, timestamps, graph paths, and query duration. A missing graph result remains missing; neither the API, UI, nor LLM fills it in.
+The graph layer owns schema, indexes, ingestion, and parameterized Cypher. It exposes bounded operations for fund tracing, counterparty inspection, and selected flow patterns. Every traced transfer includes the sender and receiver account keys stored on its transaction node, as well as transaction references, timestamps, graph paths, and query duration. The pass-through query bounds both transfers to the requested time window. A missing graph result remains missing; neither the API, UI, nor LLM fills it in. The loader projects only inference-safe columns, preserves row-derived transaction IDs and duplicate source rows, and uses idempotent batched `MERGE` operations.
 
-The initial setup creates the FalkorDB service and schema files. Full-dataset ingestion is deliberately postponed until the user supplies the data and representative memory/runtime behavior can be measured.
+Offline graph features use a separate compact `FAccount`/`FLOW` feature graph, so historical feature construction does not alter the transaction-evidence graph. DuckDB externally sorts a projection containing only transaction ID, timestamp, and sender/receiver account keys. The builder processes complete same-minute groups by querying prior state before applying that minute. It creates an account-key index and writes a target-free Parquet sidecar with recent 24-hour in/out counterparty counts for both endpoints and a prior reverse-flow flag. Labels, split assignments, and pattern metadata are not read. The full 5,078,345-row extraction completed in 1,563 seconds, and all rows reconciled. On the frozen test cohort, LightGBM with these graph features scored below the tabular baseline: average precision was 0.1521 versus 0.1587, and recall at a 0.1% alert budget was 14.73% versus 15.89%.
+
+The local capacity probe loaded a 500,000-row chronological prefix into a separate transaction-evidence graph. It reconciled all transaction and edge counts, used about 706 MiB of database memory, and completed in 31.3 seconds. A simple row-proportional estimate for all 5,078,345 transactions is about 7 GiB before host headroom; the full transaction-evidence graph was not loaded on this 14 GiB host with about 5.6 GiB available. This estimate is a capacity projection, not a measured full-load result. The compact feature graph is independently built and measured; its capacity does not establish full transaction-graph capacity.
 
 ## API, policy, and investigation
 
-FastAPI uses Pydantic request and response models. The API coordinates scoring, policy, graph tool calls, investigation reports, and audit records. The policy layer owns action mapping; model and LLM outputs are proposals only. The first policy actions are `allow`, `review`, and simulated `block`.
+FastAPI uses strict Pydantic request and response models. Implemented routes serve a ranked alert queue and benchmark artifacts, then combine target-free replay scores with deterministic `allow`/`review` policy and FalkorDB evidence. The API rejects unknown label-like fields and the score repository fails closed if the replay artifact contains target, split, or typology columns. The current report is a deterministic evidence summary; an optional tool-calling LLM is not connected yet.
 
 The investigation model is optional and is invoked only for selected cases. It receives a score plus records returned by approved graph tools. It may propose hypotheses and summarize evidence, but deterministic validation checks transaction IDs, paths, amounts, and timestamps against retrieved records before showing claims as established. Provider errors or invalid output fall back to deterministic review.
 
@@ -73,6 +75,8 @@ Next.js App Router, TypeScript, Tailwind CSS, and shadcn/ui provide the web appl
 - **System:** service state and replay controls.
 
 The UI communicates that its data is a synthetic replay. It never creates graph facts locally; graph structure is rendered from the API's query-backed response.
+
+The web client calls the same-origin `/api` path. Next.js rewrites those requests to `TRACEAML_API_ORIGIN` (default `http://127.0.0.1:8000`), avoiding browser CORS configuration for local development. The API and graph loader both use `TRACEAML_GRAPH_NAME`, so the loader must target the same graph configured for the API.
 
 ## Local services and reliability
 

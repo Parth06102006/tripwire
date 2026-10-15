@@ -1,0 +1,35 @@
+[project]
+name = "traceaml-graph"
+version = "0.1.0"
+description = "TraceAML FalkorDB graph layer: idempotent ingestion and bounded investigation queries."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.0",
+    "falkordb>=1.0",
+    "pyarrow>=17.0",
+]
+
+[project.scripts]
+traceaml-load-graph = "graph.load_graph:main"
+traceaml-build-graph-features = "graph.feature_stream:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/graph"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

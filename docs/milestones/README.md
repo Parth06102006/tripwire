@@ -9,7 +9,7 @@ The files in this directory are role charters and shared delivery gates. They re
 | Kanishka | Frontend and product UI | [Frontend charter](kanishka/milestones.md) |
 | Ashwani | Graph and data engineering | [Graph charter](ashwani/milestones.md) |
 | Parth | Backend and investigation integration | [Backend charter](parth/milestones.md) |
-| User | Fraud intelligence and evaluation lead | [Evaluation charter](priyanshu/milestones.md) |
+| Priyanshu | Fraud intelligence, evaluation, and integration lead | [Evaluation charter](priyanshu/milestones.md) |
 
 The existing `milestones.md` filenames are retained so project references do not break. They now document ownership and interfaces, not dated implementation plans.
 

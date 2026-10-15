@@ -10,7 +10,7 @@ This file records shared API and graph contracts. Pydantic models and executable
 - Target labels and typology truth never appear in inference responses.
 - Errors use standard HTTP status codes and a JSON `detail` value. Graph-dependent operations return `503` when FalkorDB is unavailable.
 
-## Initial endpoints
+## Implemented endpoints
 
 ### `GET /api/health`
 
@@ -25,6 +25,14 @@ Returns service readiness and dependency status.
 ```
 
 Allowed status values for dependencies are `available`, `unavailable`, and `not_configured`. Health output contains no credentials or dataset labels.
+
+### `GET /api/alerts`
+
+Accepts `limit` from 1-200 and a non-negative `offset`. Returns `total`, `limit`, `offset`, and items containing `transaction_id`, `timestamp`, `score`, and deterministic `decision` (`allow` or `review`). Items sort by score descending, then transaction ID ascending. Decisions use the validation-selected LightGBM threshold. The API reads only the target-free `inference_scores.parquet` artifact.
+
+### `GET /api/benchmarks`
+
+Returns the `logreg` and `lgbm` sections from the offline `baseline_metrics.json` artifact under a `models` key. When `TRACEAML_GRAPH_METRICS_PATH` points to an existing graph-ablation run, its model entries (including `lgbm_graph`) are merged into the response. The `performance` object is loaded from `TRACEAML_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
 
 ### `POST /api/investigations`
 
@@ -47,18 +55,27 @@ Response shape:
 {
   "investigation_id": "inv_...",
   "transaction_id": "source-transaction-id",
+  "risk_score": 0.0,
+  "decision": "review",
+  "policy_version": "v1",
   "evidence": {
     "transactions": [],
     "accounts": [],
     "paths": [],
     "query_duration_ms": 0.0
   },
-  "report": null,
+  "report": {
+    "hypothesis": "...",
+    "supporting_transaction_ids": [],
+    "counterevidence_ids": [],
+    "recommendation": "review",
+    "validation": "validated"
+  },
   "created_at": "2026-10-15T00:00:00Z"
 }
 ```
 
-Evidence arrays contain only records returned by executed queries. A report is absent until the optional investigator runs and its claims pass validation.
+The score is loaded from the target-free replay artifact. Deterministic policy compares it with the validation-selected threshold. The current report is a deterministic summary; it does not call an LLM. Evidence arrays contain only records returned by executed queries. The API calls `trace_funds`, `inspect_counterparties`, and bounded `detect_flow_patterns` variants. Query duration covers all calls. Unknown scored IDs return 404, unavailable graph or score artifacts return 503, and invalid request bounds return 422.
 
 ### Investigation record fields
 
@@ -83,7 +100,7 @@ The inference graph excludes laundering labels and typology ground truth. Case m
 
 Create property indexes before applying unique node constraints. FalkorDB unique constraints are created through the supported client constraint API after those indexes exist; do not use unsupported Neo4j-only constraint syntax in Cypher files.
 
-## Case review contract
+## Planned case review contract (not implemented)
 
 `GET /api/cases` returns cases with status `suspected`, `under_review`, `confirmed`, or `dismissed`, using bounded pagination.
 
@@ -99,8 +116,28 @@ Create property indexes before applying unique node constraints. FalkorDB unique
 
 All tool queries are parameterized and bounded. An empty result is not evidence that no suspicious activity exists outside the query scope.
 
+The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together. Account-anchored inspection and pattern queries center their window on the account's latest sent or received transaction. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
+
 ## Data and model evaluation contract
 
-Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process.
+Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process. The initial model, graph, and API measurements are in [the Iteration 1 performance report](benchmarks/iteration-1-performance.md). Serial loopback throughput must not be presented as concurrent capacity.
 
 Primary metrics are precision, recall, F1, average precision/PR-AUC, and recall at a named alert budget. Latency reports include P50/P95 and warm-up method. Dollar-weighted recall must state how value is counted and must not imply unique recovered funds.
+
+### HI-Small v8 offline table
+
+`data/processed/hi-small-v8/transactions.parquet` is the normalized offline transaction table. The source's two `Account` columns are mapped by position to `sender_account` and `receiver_account`. The canonical account keys are `{bank}::{account}` with both values preserved as strings. `transaction_id` is derived from the source row number and is stable only for the recorded transaction-file SHA-256.
+
+Exact duplicate source rows are retained as distinct transaction records with distinct row-derived IDs. HI-Small v8 contains 9 such rows; the profile records the count. Do not deduplicate the primary benchmark cohort silently.
+
+The table contains `transaction_id`, `timestamp`, sender/receiver bank and account fields, sender/receiver account keys, `amount_paid`, `payment_currency`, `amount_received`, `receiving_currency`, `payment_format`, `target_is_laundering`, `source_row_number`, and `split`. `target_is_laundering` is the only transaction label and is offline-only. `split` is one of `train`, `validation`, or `test` and is fixed by the adjacent `split-manifest.json`.
+
+The generated `features.parquet` contains no target column. Feature generation projects only source transaction inputs, transaction IDs, and frozen split assignments. The offline baseline evaluator joins labels from the normalized transaction table by `(transaction_id, split)`, loads train and validation labels for fitting and threshold selection, then loads test labels only after thresholds are locked. This labeled evaluation path must not be wired into the graph, API, or inference feature path.
+
+The source timestamp has minute resolution. All rows at one timestamp belong to one chronological split. A feature for transaction `t` may use only transactions strictly earlier than `t`; same-minute transactions are excluded from prior-history features. Keep each amount paired with its own currency. The patterns sidecar is not part of this feature table.
+
+### Point-in-time graph feature sidecar
+
+`traceaml-build-graph-features` writes a target-free Parquet sidecar keyed by `transaction_id`. Its exact columns are the transaction ID plus `gfeat_sender_out_24h`, `gfeat_sender_in_24h`, `gfeat_receiver_out_24h`, `gfeat_receiver_in_24h`, and `gfeat_prior_reverse_flow`. The graph builder reads only `transaction_id`, `timestamp`, `sender_account_key`, and `receiver_account_key`; it never reads target, split, or pattern columns. DuckDB sorts those fields by `(timestamp, transaction_id)`, and the builder queries FalkorDB state before applying each complete minute. Recent counterparties use the inclusive 24-hour lower bound and strict earlier-minute upper bound. Reverse flow means a prior directed edge from receiver to sender. The builder uses a separate `FAccount`/`FLOW` graph with an account-key range index and records source hash, row reconciliation, feature definitions, ordering, and timings in a manifest.
+
+The baseline trainer accepts this sidecar only through `--graph-features`. It requires the exact target-free schema, unique non-null IDs, integer features, and a binary reverse-flow flag. The offline evaluator joins by transaction ID and fails if any split loses rows; labels and split assignments continue to come only from the offline evaluation tables. The `lgbm_graph` arm shares the baseline's frozen split, threshold-selection rules, categorical encoding, and alert budget.
