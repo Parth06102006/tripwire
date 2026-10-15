@@ -185,6 +185,55 @@ def test_benchmarks_reads_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert_no_labels(response.json())
 
 
+def test_benchmarks_merges_graph_ablation_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Graph metrics are added to the baseline response when a run exists."""
+    baseline = tmp_path / "baseline-metrics.json"
+    metrics = tmp_path / "graph-metrics.json"
+    model_metrics = {
+                    "average_precision": {"test": 0.6},
+                    "val_threshold_max_f1": 0.2,
+                    "test_at_val_threshold": {
+                        "precision": 0.5,
+                        "recall": 0.6,
+                        "f1": 0.55,
+                        "true_positives": 6,
+                        "false_positives": 6,
+                    },
+                    "test_at_alert_budget": {
+                        "budget": 0.001,
+                        "alerts": 10,
+                        "true_positives": 4,
+                        "precision": 0.4,
+                        "recall": 0.06,
+                    },
+                    "splits": {
+                        "test": {
+                            "rows": 100,
+                            "prevalence": 0.05,
+                            "alerts": 10,
+                            "precision": 0.4,
+                            "recall": 0.8,
+                        }
+                    },
+                }
+    baseline.write_text(json.dumps({"lgbm": model_metrics}), encoding="utf-8")
+    graph_lgbm_metrics = {**model_metrics, "average_precision": {"test": 0.99}}
+    metrics.write_text(
+        json.dumps({"lgbm": graph_lgbm_metrics, "lgbm_graph": model_metrics}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRACEAML_BASELINE_METRICS_PATH", str(baseline))
+    monkeypatch.setenv("TRACEAML_GRAPH_METRICS_PATH", str(metrics))
+    with make_client() as client:
+        response = client.get("/api/benchmarks")
+    assert response.status_code == 200
+    assert response.json()["models"]["lgbm"]["average_precision"]["test"] == 0.6
+    assert response.json()["models"]["lgbm_graph"]["average_precision"]["test"] == 0.6
+    assert_no_labels(response.json())
+
+
 def test_investigation_uses_all_three_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

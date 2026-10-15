@@ -8,7 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TraceAML Analyst Workbench",
   description:
-    "TraceAML analyst workbench scaffold. UI shell only, APIs not wired yet.",
+    "TraceAML analyst workbench. Queue, investigation, and benchmark views read from the API.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </div>
         <footer className="border-t border-[#292936]">
           <p className="mx-auto w-full max-w-6xl px-6 py-4 font-mono text-xs text-[#9693A8]">
-            Scaffold only. No API wiring. No measured results shown.
+            TraceAML workbench. Displayed records and metrics come from the API; nothing is invented locally.
           </p>
         </footer>
       </body>

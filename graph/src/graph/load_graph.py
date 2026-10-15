@@ -150,7 +150,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--port", type=int, default=int(os.environ.get("TRACEAML_FALKORDB_PORT", PORT_DEFAULT))
     )
-    parser.add_argument("--graph-name", default=GRAPH_NAME_DEFAULT)
+    parser.add_argument(
+        "--graph-name",
+        default=os.environ.get("TRACEAML_GRAPH_NAME", GRAPH_NAME_DEFAULT),
+    )
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE_DEFAULT)
     parser.add_argument("--limit", type=int, default=None, help=LIMIT_HELP)
     parser.add_argument("--timeout-ms", type=int, default=TIMEOUT_MS_DEFAULT)

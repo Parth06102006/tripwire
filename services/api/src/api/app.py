@@ -67,6 +67,14 @@ def read_benchmarks(settings: Settings) -> schemas.BenchmarksResponse:
         )
         if "models" not in payload:
             payload = {"models": payload}
+        graph_metrics_path = resolve_path(settings.graph_metrics_path)
+        if graph_metrics_path.is_file():
+            graph_payload = json.loads(graph_metrics_path.read_text(encoding="utf-8"))
+            graph_models = graph_payload.get("models", graph_payload)
+            if not isinstance(graph_models, dict):
+                raise ValueError("graph benchmark artifact must contain a models object")
+            for model_name, metrics in graph_models.items():
+                payload["models"].setdefault(model_name, metrics)
         return schemas.BenchmarksResponse.model_validate(payload)
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="benchmark artifact unavailable") from exc

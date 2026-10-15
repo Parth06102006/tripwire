@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     baseline_metrics_path: str = Field(
         default="artifacts/runs/hi-small-v8/baselines/baseline_metrics.json"
     )
+    graph_metrics_path: str = Field(
+        default="artifacts/runs/hi-small-v8/graph-ablation/baseline_metrics.json"
+    )
     score_model: str = Field(default="lgbm")
 
 

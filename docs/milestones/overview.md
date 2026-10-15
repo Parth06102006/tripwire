@@ -8,7 +8,7 @@ The web app, uv-managed API and ML projects, and local FalkorDB service are set 
 
 FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-row chronological prefix in `traceaml-capacity` reconciles 500,000 transactions and each edge direction; FalkorDB used about 706 MiB and loading took 31.3 seconds. A separate 1,000-row smoke graph was reloaded idempotently and exercised through all three tools. The full graph was not loaded: a simple linear estimate is about 7 GiB, exceeding available memory with safe headroom on this host. Artifacts and graph data remain local.
 
-The FastAPI service now serves the target-free replay alert queue, offline benchmark metrics, and bounded graph investigations. It uses a deterministic threshold policy and evidence verifier. The score artifact contains 761,639 held-out transactions and only transaction ID, timestamp, and score. Endpoint tests cover label exclusion, ranked alerts, validation, and evidence grounding; live API investigation awaits a graph containing the held-out replay cohort.
+The FastAPI service now serves the target-free replay alert queue, offline benchmark metrics, and bounded graph investigations. It uses a deterministic threshold policy and evidence verifier. The score artifact contains 761,639 held-out transactions and only transaction ID, timestamp, and score. Endpoint tests cover label exclusion, ranked alerts, validation, evidence grounding, and optional graph-ablation metrics; live API investigation awaits a graph containing the held-out replay cohort. The alert, investigation, and benchmark views are wired to API responses, and Next.js proxies same-origin `/api` requests to the configured API origin.
 
 The point-in-time graph feature builder and optional `lgbm_graph` training arm are implemented. A 50,000-row prefix smoke processed four complete minutes, wrote 43,547 feature rows, and completed in 2.16 seconds with nonzero values in all five features. A full extraction attempt exposed slow two-hop expansion, so that candidate was removed before the full run; the current full feature build is in progress. The feature graph is indexed by account key and remains separate from the transaction-evidence graph.
 
@@ -40,7 +40,7 @@ The point-in-time graph feature builder and optional `lgbm_graph` training arm a
 
 ### Analyst workbench and evidence
 
-- [ ] Present alerts, investigation paths, verified report, and benchmark measurements. (API-backed UI wiring is in progress.)
+- [x] Present alerts, investigation paths, verified report, and benchmark measurements from API response contracts.
 - [ ] Confirm graph evidence is API output from actual FalkorDB Cypher.
 - [ ] Verify report IDs, paths, amounts, and timestamps against retrieved records.
 - [ ] Label synthetic replay clearly and avoid claims of real-world effectiveness.
