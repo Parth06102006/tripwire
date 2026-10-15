@@ -4,7 +4,7 @@ This document tracks Iteration 1 outcomes without retaining the previous dated h
 
 ## Current state
 
-The web app, uv-managed API and ML projects, and local FalkorDB service are set up. HI-Small Kaggle version 8 is present locally and ignored by Git. Its aggregate source profile records 5,078,345 transactions, 5,177 positive labels, 9 exact duplicate rows, a 2022-09-01 through 2022-09-18 timestamp range, and per-currency amount ranges. Normalized transaction Parquet and a chronological split manifest are generated. The frozen boundaries are train through 2022-09-07 14:55, validation through 2022-09-09 03:16, then test. Past-only transaction and account-history features plus logistic regression and LightGBM baselines are reproducible: two clean runs produced bitwise-identical score and model artifacts. On the 761,639-row test split (0.205% positive prevalence), LightGBM average precision is 0.1587; at its validation-selected threshold precision is 23.79%, recall is 24.79%, and F1 is 0.2428. At a fixed 0.1% alert budget it detects 248 positives (15.89% recall). These values supersede the earlier 0.1853 run. A daily report shows a low-prevalence early test period followed by a higher-prevalence tail; the data is synthetic and these results are not evidence of real-world AML effectiveness.
+The web app, uv-managed API and ML projects, and local FalkorDB service are set up. HI-Small Kaggle version 8 is present locally and ignored by Git. Its aggregate source profile records 5,078,345 transactions, 5,177 positive labels, 9 exact duplicate rows, a 2022-09-01 through 2022-09-18 timestamp range, and per-currency amount ranges. Normalized transaction Parquet and a chronological split manifest are generated. The frozen boundaries are train through 2022-09-07 14:55, validation through 2022-09-09 03:16, then test. Past-only transaction and account-history features plus logistic regression and LightGBM baselines reproduce bitwise across clean runs. On the 761,639-row test split (0.205% positive prevalence), LightGBM average precision is 0.1587; at its validation-selected threshold precision is 23.79%, recall is 24.79%, and F1 is 0.2428. At a fixed 0.1% alert budget it detects 248 positives (15.89% recall). The daily report shows 0.119% positive prevalence across September 9–10, then 59.12% across September 11–18, when only 1,108 test transactions remain. See the [performance report](../benchmarks/iteration-1-performance.md); the data is synthetic and does not establish real-world AML effectiveness.
 
 FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-row chronological prefix in `traceaml-capacity` reconciles 500,000 transactions and each edge direction; FalkorDB used about 706 MiB and loading took 31.3 seconds. A separate 1,000-row smoke graph was reloaded idempotently and exercised through all three tools. The full graph was not loaded: a simple linear estimate is about 7 GiB, exceeding available memory with safe headroom on this host. Artifacts and graph data remain local.
 
@@ -33,7 +33,7 @@ The point-in-time graph feature builder processed all 5,078,345 transactions int
 - [x] Ingest a bounded chronological prefix idempotently into first-class `Transaction` nodes and reconcile transaction/edge counts.
 - [x] Implement and live-smoke-test bounded `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`.
 - [ ] Load and benchmark the complete 5,078,345-transaction graph on hardware with sufficient memory.
-- [ ] Serve validated scoring and investigation contracts through FastAPI.
+- [x] Serve validated scoring and investigation contracts through FastAPI.
 - [x] Serve a ranked target-free replay queue, benchmark artifacts, deterministic decisions, and verified graph-investigation responses.
 - [x] Load a target-free demo slice containing a held-out replay case and verify a live API investigation against FalkorDB.
 - [ ] Preserve deterministic policy and human-confirmed case-memory provenance.
@@ -43,11 +43,11 @@ The point-in-time graph feature builder processed all 5,078,345 transactions int
 - [x] Present alerts, investigation paths, verified report, and benchmark measurements from API response contracts.
 - [x] Confirm graph evidence is API output from actual FalkorDB Cypher.
 - [x] Verify report IDs, paths, amounts, and timestamps against retrieved records.
-- [ ] Label synthetic replay clearly and avoid claims of real-world effectiveness.
+- [x] Label synthetic replay clearly and avoid claims of real-world effectiveness.
 
 ### Release evidence
 
-- [ ] Document clean setup and data placement without committing data or credentials.
+- [x] Document clean setup and data placement without committing data or credentials.
 - [x] Record metric definitions, split, feature set, hardware, serial workload protocol, latency, throughput, and costs that remain unpriced.
 - [ ] Provide graph schema and queries, reproducible benchmark instructions, and demo materials.
 

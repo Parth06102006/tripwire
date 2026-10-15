@@ -70,6 +70,68 @@ export interface ModelBenchmark {
 
 export interface BenchmarksResponse {
   models: Record<string, ModelBenchmark>;
+  performance?: PerformanceSummary | null;
+}
+
+export interface LatencyStats {
+  samples: number;
+  p50_ms: number;
+  p95_ms: number;
+  mean_ms: number;
+}
+
+export interface SerialLatencyStats extends LatencyStats {
+  serial_requests_per_second: number;
+}
+
+export interface PerformanceSummary {
+  measured_on: string;
+  dataset_label: string;
+  hardware: string;
+  graph_scope: string;
+  execution_mode: string;
+  model_inference: {
+    single_prepared_row: LatencyStats;
+    full_test_cohort: {
+      rows: number;
+      repeats: number;
+      median_seconds: number;
+      transactions_per_second: number;
+      threads: number;
+      max_abs_error_vs_saved_scores: number;
+    };
+  };
+  api: {
+    alerts_limit_50: SerialLatencyStats;
+    benchmarks: SerialLatencyStats;
+    investigation: SerialLatencyStats & {
+      graph_query_sum: LatencyStats;
+      evidence_transactions: number;
+      evidence_accounts: number;
+      evidence_paths: number;
+      all_reports_validated: boolean;
+    };
+  };
+  graph_queries: {
+    trace_funds: LatencyStats;
+    inspect_counterparties: LatencyStats;
+    fan_out: LatencyStats & { matches_min: number; matches_max: number };
+    fan_in: LatencyStats & { matches_min: number; matches_max: number };
+    pass_through: LatencyStats & { matches_min: number; matches_max: number };
+  };
+  cost: {
+    external_llm_calls: number;
+    external_llm_cost: string;
+    local_compute_cost: string;
+    cost_per_1000_decisions: string;
+    dollar_weighted_recall: string;
+  };
+}
+
+export interface HealthResponse {
+  status: "ok";
+  falkordb: "available" | "unavailable" | "not_configured";
+  version: string;
 }
 
 export interface InvestigationRequest {
@@ -182,7 +244,27 @@ export function isAlertsResponse(body: unknown): body is AlertsResponse {
 }
 
 export function isBenchmarksResponse(body: unknown): body is BenchmarksResponse {
-  return isRecord(body) && isRecord(body.models);
+  if (!isRecord(body) || !isRecord(body.models)) return false;
+  if (body.performance === undefined || body.performance === null) return true;
+  if (!isRecord(body.performance)) return false;
+  return (
+    typeof body.performance.measured_on === "string" &&
+    isRecord(body.performance.model_inference) &&
+    isRecord(body.performance.api) &&
+    isRecord(body.performance.graph_queries) &&
+    isRecord(body.performance.cost)
+  );
+}
+
+export function isHealthResponse(body: unknown): body is HealthResponse {
+  return (
+    isRecord(body) &&
+    body.status === "ok" &&
+    (body.falkordb === "available" ||
+      body.falkordb === "unavailable" ||
+      body.falkordb === "not_configured") &&
+    typeof body.version === "string"
+  );
 }
 
 export function isInvestigationResponse(body: unknown): body is InvestigationResponse {
@@ -208,6 +290,11 @@ export const benchmarksQuery = {
   queryKey: ["benchmarks"] as const,
   queryFn: () =>
     fetchJson<BenchmarksResponse>("/api/benchmarks", undefined, isBenchmarksResponse),
+};
+
+export const healthQuery = {
+  queryKey: ["health"] as const,
+  queryFn: () => fetchJson<HealthResponse>("/api/health", undefined, isHealthResponse),
 };
 
 export async function postInvestigation(

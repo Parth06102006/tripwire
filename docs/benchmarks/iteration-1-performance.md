@@ -20,6 +20,18 @@ Measured 2026-10-16 on the local development machine. These results use syntheti
 
 The graph features did not improve this benchmark. Average precision fell by 0.0067, and recall at the fixed alert budget fell by 1.15 percentage points. Keep tabular LightGBM as the detection baseline. Graph value in this iteration is the investigation workflow, not a better classifier score.
 
+## Temporal label distribution
+
+Training prevalence is 0.0803%, validation prevalence is 0.0998%, and total test prevalence is 0.2050%. The daily test report shows that the test period is heavily imbalanced over time: September 9–10 contain 760,531 transactions and 906 positives (0.1191%); September 11–18 contain only 1,108 transactions but 655 positives (59.12%). The final tail is a small fraction of test rows but contains about 42% of test positives. September 18 has 8 positives, below the daily report's 10-positive minimum for model metrics.
+
+This distribution shift limits the meaning of one aggregate test score. Preserve the chronological split and report the day-level counts alongside aggregate metrics. The observed shift is a property of this synthetic dataset and is not evidence of real transaction prevalence.
+
+## Reproducibility and leakage checks
+
+A fresh baseline run into `artifacts/runs/hi-small-v8/repro-check/` matched the primary run byte for byte for `baseline_metrics.json`, `test_scores.parquet`, `models/lgbm.txt`, and `models/logreg.joblib`. The `baseline_config.json` includes a run timestamp, so that file is compared by configuration rather than file hash. The test-score artifact hash was `3442807e78b2cdd94b3f2fa14e54dc811b1f6f02260267dd9b8070543efb98d2` in both runs.
+
+The ML suite passed 17 tests, including target exclusion and same-minute/future-activity leakage checks. The graph suite passed 46 tests, including feature-stream timing and inference-property allowlists. The API suite passed 21 tests, including target-free response validation and the benchmark performance contract. The web lint and production build passed.
+
 The feature sidecar contains all 5,078,345 transaction IDs and five target-free columns. Extraction took 1,563 seconds (26 minutes), including 1.3 seconds for sorting and 1,561.8 seconds for graph queries and writes. The largest same-minute batch contained 11,193 rows. The builder excluded target and split columns and processed complete same-minute groups before updating graph state.
 
 ## Scoring and API latency
@@ -88,3 +100,5 @@ uv run --project ml traceaml-train-baselines \
 ```
 
 The local latency artifacts preserve the sample summaries for this run. Repeat the same workload and hardware protocol before comparing future service changes.
+
+The versioned dashboard snapshot is `docs/benchmarks/iteration-1-performance.json`. The API reads it through `TRACEAML_PERFORMANCE_PATH`; raw transaction data and generated run artifacts remain local and Git-ignored.

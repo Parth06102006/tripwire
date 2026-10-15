@@ -9,12 +9,12 @@ export default function Home() {
           TraceAML
         </p>
         <h1 className="mt-2 max-w-xl text-3xl font-semibold tracking-tight">
-          Analyst workbench scaffold
+          Synthetic AML transaction replay
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#9693A8]">
-          Initial Next.js App Router shell for transaction triage and graph
-          investigation. Routes and layout only. No backend calls, no replay
-          stream, no scores or metrics are displayed in this scaffold.
+          Review risk-ranked transactions from IBM AMLworld HI-Small, investigate
+          their bounded money-flow relationships in FalkorDB, and compare offline
+          model results. This is a synthetic dataset replay, not a live bank feed.
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {NAV_ITEMS.map((item) => (
@@ -32,14 +32,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-[#292936] bg-[#12121A] p-6">
-        <h2 className="text-sm font-semibold">Scaffold scope</h2>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-[#9693A8]">
-          <li>TypeScript with strict mode, App Router, Tailwind CSS, ESLint.</li>
-          <li>Static routes only; no data fetching or Server-Sent Events yet.</li>
-          <li>Empty states intentionally show no transactions or results.</li>
-        </ul>
-      </section>
     </main>
   );
 }

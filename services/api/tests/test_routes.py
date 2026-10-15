@@ -182,6 +182,9 @@ def test_benchmarks_reads_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         response = client.get("/api/benchmarks")
     assert response.status_code == 200
     assert response.json()["models"]["lgbm"]["test_at_val_threshold"]["true_positives"] == 3
+    assert response.json()["performance"]["api"]["investigation"]["p95_ms"] == pytest.approx(
+        3581.872193
+    )
     assert_no_labels(response.json())
 
 

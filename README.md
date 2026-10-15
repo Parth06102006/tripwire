@@ -93,7 +93,7 @@ Preparation writes `data/processed/hi-small-v8/transactions.parquet` and `split-
 
 The local v8 run has completed logistic regression and LightGBM with tabular and past-only behavioral features. Two clean baseline runs reproduced scores and model artifacts bitwise. On the frozen test split (761,639 transactions; 0.205% positive prevalence), LightGBM average precision is 0.1587; at its validation-selected threshold, precision is 23.79%, recall is 24.79%, and F1 is 0.2428. At a fixed 0.1% alert budget, it detects 248 positives (15.89% recall). Logistic regression average precision is 0.0146 and recall at that alert budget is 0%. These are synthetic-data results. Full metrics and configuration are in the local, Git-ignored `artifacts/runs/hi-small-v8/baselines/` directory and can be regenerated with the commands above.
 
-The graph-feature ablation is complete on the same frozen cohort. It reached average precision 0.1521 versus 0.1587 for tabular LightGBM, and recall at the fixed 0.1% alert budget fell from 15.89% to 14.73%. Test prevalence is higher than train and validation, with a higher-prevalence tail in the daily report. Results describe this synthetic dataset and do not establish real-world AML effectiveness.
+The graph-feature ablation is complete on the same frozen cohort. It reached average precision 0.1521 versus 0.1587 for tabular LightGBM, and recall at the fixed 0.1% alert budget fell from 15.89% to 14.73%. Test prevalence is 0.205%, but the daily report shows 0.119% across September 9–10 and 59.12% across September 11–18, when only 1,108 test transactions remain. Results describe this synthetic dataset and do not establish real-world AML effectiveness.
 
 The replay API consumes `inference_scores.parquet`, a separate artifact containing only transaction ID, timestamp, and LightGBM risk score. The publishing command explicitly projects those columns and does not read the evaluation target.
 
@@ -107,7 +107,7 @@ FalkorDB is the source of graph topology and investigation evidence. Transfers u
 (:Account)-[:SENT]->(:Transaction)-[:RECEIVED]->(:Account)
 ```
 
-Approved investigation tools are `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`. They use bounded parameterized queries and return source transaction IDs, times, values, paths, and query duration. The optional LLM can choose tools and summarize retrieved evidence; deterministic code verifies claims before display. Models and LLM output do not decide policy actions.
+Approved investigation tools are `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`. They use bounded parameterized queries and return source transaction IDs, times, values, paths, and query duration. The current investigator runs these tools deterministically and validates the resulting report against retrieved evidence. Optional tool-calling LLM integration is not connected. Models and any future LLM output do not decide policy actions.
 
 Install the graph project and load the local capacity sample with:
 

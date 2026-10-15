@@ -32,7 +32,7 @@ Accepts `limit` from 1-200 and a non-negative `offset`. Returns `total`, `limit`
 
 ### `GET /api/benchmarks`
 
-Returns the `logreg` and `lgbm` sections from the offline `baseline_metrics.json` artifact under a `models` key. When `TRACEAML_GRAPH_METRICS_PATH` points to an existing graph-ablation run, its model entries (including `lgbm_graph`) are merged into the response. A missing graph-ablation artifact is allowed while that experiment is pending. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
+Returns the `logreg` and `lgbm` sections from the offline `baseline_metrics.json` artifact under a `models` key. When `TRACEAML_GRAPH_METRICS_PATH` points to an existing graph-ablation run, its model entries (including `lgbm_graph`) are merged into the response. The `performance` object is loaded from `TRACEAML_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
 
 ### `POST /api/investigations`
 

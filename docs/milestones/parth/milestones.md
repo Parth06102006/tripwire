@@ -36,6 +36,7 @@ API responses validate against shared contracts, service failures return typed e
 - **Complete:** target-free score artifact loading with cached risk-ranked results, deterministic threshold policy, and label-field rejection.
 - **Complete:** investigation orchestration calls bounded fund tracing, counterparty inspection, and flow-pattern tools; the verifier rejects transaction IDs and paths absent from returned evidence.
 - **Complete:** benchmark response merges `lgbm_graph` metrics when the configured graph-ablation artifact exists, without replacing canonical baseline entries.
+- **Complete:** benchmark response includes the validated measured-performance snapshot from `TRACEAML_PERFORMANCE_PATH` when configured.
 - **Verified:** live API investigation against the 998,021-transaction target-free demo graph returned validated evidence for a held-out case.
 - **Pending:** optional LLM integration, case persistence/review history, and visual analyst review of the frontend integration.
 - **Verification:** API Ruff checks pass and 21 tests pass. Local Next.js route and `/api` proxy return HTTP 200.

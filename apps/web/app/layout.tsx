@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   TraceAML
                 </span>
                 <span className="text-xs text-[#9693A8]">
-                  Analyst workbench shell
+                  Synthetic AMLworld replay · offline evaluation
                 </span>
               </span>
             </Link>
@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </div>
         <footer className="border-t border-[#292936]">
           <p className="mx-auto w-full max-w-6xl px-6 py-4 font-mono text-xs text-[#9693A8]">
-            TraceAML workbench. Displayed records and metrics come from the API; nothing is invented locally.
+            Synthetic IBM AMLworld HI-Small data. This replay is not connected to a live bank feed. Displayed records and metrics come from the API.
           </p>
         </footer>
       </body>

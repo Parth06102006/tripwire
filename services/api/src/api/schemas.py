@@ -86,10 +86,77 @@ class ModelBenchmark(StrictModel):
     splits: dict[str, SplitMetrics]
 
 
+class LatencyStats(StrictModel):
+    samples: int
+    p50_ms: float
+    p95_ms: float
+    mean_ms: float
+
+
+class SerialLatencyStats(LatencyStats):
+    serial_requests_per_second: float
+
+
+class CohortInferenceStats(StrictModel):
+    rows: int
+    repeats: int
+    median_seconds: float
+    transactions_per_second: float
+    threads: int
+    max_abs_error_vs_saved_scores: float
+
+
+class ModelPerformance(StrictModel):
+    single_prepared_row: LatencyStats
+    full_test_cohort: CohortInferenceStats
+
+
+class InvestigationPerformance(SerialLatencyStats):
+    graph_query_sum: LatencyStats
+    evidence_transactions: int
+    evidence_accounts: int
+    evidence_paths: int
+    all_reports_validated: bool
+
+
+class FlowQueryPerformance(LatencyStats):
+    matches_min: int
+    matches_max: int
+
+
+class GraphQueryPerformance(StrictModel):
+    trace_funds: LatencyStats
+    inspect_counterparties: LatencyStats
+    fan_out: FlowQueryPerformance
+    fan_in: FlowQueryPerformance
+    pass_through: FlowQueryPerformance
+
+
+class CostStatus(StrictModel):
+    external_llm_calls: int
+    external_llm_cost: str
+    local_compute_cost: str
+    cost_per_1000_decisions: str
+    dollar_weighted_recall: str
+
+
+class PerformanceSummary(StrictModel):
+    measured_on: str
+    dataset_label: str
+    hardware: str
+    graph_scope: str
+    execution_mode: str
+    model_inference: ModelPerformance
+    api: dict[str, SerialLatencyStats | InvestigationPerformance]
+    graph_queries: GraphQueryPerformance
+    cost: CostStatus
+
+
 class BenchmarksResponse(StrictModel):
     """Benchmark metrics read from the offline run artifact."""
 
     models: dict[str, ModelBenchmark]
+    performance: PerformanceSummary | None = None
 
 
 class InvestigationRequest(StrictModel):
