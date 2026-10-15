@@ -50,28 +50,36 @@ class FakeGraph:
 
     def query(self, cypher, params=None, timeout=None):
         self.calls.append((cypher, params, timeout))
-        if "count(DISTINCT other)" in cypher:
-            # Distinct-counterparty gate: 3 counterparties, 5 transfers.
-            return FakeResult([[3, 5]])
-        if "counterparty_key" in cypher and "middle_key" not in cypher:
-            if "RECEIVED]->(a:Account" in cypher:
-                rows = [["BANKY::00008001", "hi8-tx-00000008",
-                         "2022-09-01 00:08", 20.0, "Euro", 19.0, "Euro"]]
+        if "count(DISTINCT t." in cypher:
+            # Combined fan gate + detail: 3 counterparties, 5 transfers; the
+            # server returns details only when the threshold is met.
+            if "(a)<-[:RECEIVED]-(t" in cypher:
+                details = [["BANKY::00008001", "hi8-tx-00000008",
+                            "2022-09-01 00:08", 20.0, "Euro", 19.0, "Euro"]]
             else:
-                rows = [["BANKZ::00009001", "hi8-tx-00000009",
-                         "2022-09-01 00:09", 10.0, "US Dollar", 9.0, "US Dollar"],
-                        ["BANKZ::00009001", "hi8-tx-00000010",
-                         "2022-09-01 00:10", 11.0, "US Dollar", 10.0, "US Dollar"],
-                        ["BANKY::00008001", "hi8-tx-00000011",
-                         "2022-09-01 00:11", 12.0, "US Dollar", 11.0, "US Dollar"]]
-            return FakeResult(rows)
-        if "middle_key" in cypher:
-            return FakeResult([["BANKA::00001001", "BANKB::00002001", "BANKC::00003001",
+                details = [["BANKZ::00009001", "hi8-tx-00000009",
+                            "2022-09-01 00:09", 10.0, "US Dollar", 9.0, "US Dollar"],
+                           ["BANKZ::00009001", "hi8-tx-00000010",
+                            "2022-09-01 00:10", 11.0, "US Dollar", 10.0, "US Dollar"],
+                           ["BANKY::00008001", "hi8-tx-00000011",
+                            "2022-09-01 00:11", 12.0, "US Dollar", 11.0, "US Dollar"]]
+            if params and params.get("min_fanout", 0) > 3:
+                details = []
+            return FakeResult([[3, 5, details]])
+        if "AS histogram" in cypher:
+            # One outgoing leg 60 s after the window start.
+            assert params is not None
+            return FakeResult([[[60 * queries.HISTOGRAM_SHIFT + 1]]])
+        if "AS incoming" in cypher:
+            assert params is not None
+            return FakeResult([[[["hi8-tx-00000001", params["min_epoch"]]]]])
+        if "AS ordinal" in cypher:
+            return FakeResult([[0, "BANKA::00001001", "BANKB::00002001", "BANKC::00003001",
                                 "hi8-tx-00000001", "2022-09-01 00:01", 100.0, "US Dollar",
                                 99.0, "US Dollar",
                                 "hi8-tx-00000002", "2022-09-01 00:02", 100.0, "US Dollar",
                                 99.0, "US Dollar"]])
-        if "ORDER BY epoch DESC" in cypher:
+        if "RETURN a.last_epoch" in cypher:
             if params and params.get("account_key") == "MISSING::X":
                 return FakeResult([])
             return FakeResult([[1661990400]])
@@ -183,11 +191,15 @@ def test_trace_query_has_unique_return_aliases() -> None:
 
 
 def test_pass_through_bounds_both_transfer_times_to_the_requested_window() -> None:
-    assert "t1.timestamp_epoch >= $min_epoch AND t1.timestamp_epoch <= $max_epoch" in (
-        queries.TRACE_PASS_THROUGH
+    window = "t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch"
+    assert window in queries.TRACE_PASS_THROUGH_OUT_HISTOGRAM
+    assert window in queries.TRACE_PASS_THROUGH_FIRST_INCOMING
+    assert "LIMIT $result_limit" in queries.TRACE_PASS_THROUGH_FIRST_INCOMING
+    # Qualifying t1 intervals never extend past the window on either side.
+    intervals = queries.qualifying_intervals(
+        [100, 150, 1000], dwell_seconds=60, min_epoch=50, max_epoch=1000
     )
-    assert "t2.timestamp_epoch >= t1.timestamp_epoch" in queries.TRACE_PASS_THROUGH
-    assert "t2.timestamp_epoch <= $max_epoch" in queries.TRACE_PASS_THROUGH
+    assert intervals == [[50, 150], [940, 1000]]
 
 
 def test_all_statements_avoid_labels_and_enforce_limits() -> None:
@@ -202,6 +214,7 @@ def test_all_statements_avoid_labels_and_enforce_limits() -> None:
             "$result_limit" in statement
             or "LIMIT 1" in statement
             or "RETURN count(" in statement
+            or "RETURN collect(" in statement
         )
 
 
@@ -301,12 +314,15 @@ def test_detect_pass_through_reports_no_distinct_count() -> None:
 
 
 def test_latest_epoch_covers_both_directions() -> None:
-    statement = queries.TRACE_ACCOUNT_LATEST_EPOCH
-    assert "UNION" in statement
-    assert "-[:SENT]->" in statement
-    assert "<-[:RECEIVED]-" in statement
-    assert "ORDER BY epoch DESC" in statement
-    assert "LIMIT 1" in statement
+    fallback = queries.TRACE_ACCOUNT_LATEST_EPOCH
+    # Regression: iteration 1 used UNION ... ORDER BY ... LIMIT 1, which
+    # orders only the last branch. The fallback aggregates max() per leg.
+    assert "UNION" not in fallback
+    assert "-[:SENT]->" in fallback
+    assert "<-[:RECEIVED]-" in fallback
+    assert "max(s.timestamp_epoch)" in fallback
+    assert "max(r.timestamp_epoch)" in fallback
+    assert "a.last_epoch" in queries.TRACE_ACCOUNT_LAST_EPOCH
     # Receiver-only accounts resolve through the same lookup.
     result = queries.inspect_counterparties(
         FakeGraph(), account_key="BANKR::00009999"
@@ -314,6 +330,29 @@ def test_latest_epoch_covers_both_directions() -> None:
     assert result["anchor"] == {"account_key": "BANKR::00009999"}
     with pytest.raises(ValueError, match="unknown account_key"):
         queries.inspect_counterparties(FakeGraph(), account_key="MISSING::X")
+    with pytest.raises(queries.AccountNotFound):
+        queries.inspect_counterparties(FakeGraph(), account_key="MISSING::X")
+
+
+def test_latest_epoch_falls_back_when_property_missing() -> None:
+    class LegacyLoadedGraph(FakeGraph):
+        def query(self, cypher, params=None, timeout=None):
+            if "RETURN a.last_epoch" in cypher:
+                self.calls.append((cypher, params, timeout))
+                return FakeResult([[None]])
+            if "max(s.timestamp_epoch)" in cypher:
+                self.calls.append((cypher, params, timeout))
+                return FakeResult([[1661990999]])
+            return super().query(cypher, params=params, timeout=timeout)
+
+    graph = LegacyLoadedGraph()
+    assert queries._latest_account_epoch(graph, "BANKA::00001001", 1000) == 1661990999
+
+
+def test_unknown_transaction_raises_typed_error() -> None:
+    with pytest.raises(queries.TransactionNotFound, match="unknown transaction_id"):
+        queries.trace_funds(FakeGraph(), "missing-tx")
+    assert issubclass(queries.TransactionNotFound, ValueError)
 
 
 def test_trace_duration_covers_anchor_lookup() -> None:

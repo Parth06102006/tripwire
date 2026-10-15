@@ -42,6 +42,22 @@ DIRECTIONS: tuple[str, ...] = ("outgoing", "incoming", "both")
 PATTERNS: tuple[str, ...] = ("fan_out", "fan_in", "pass_through")
 
 
+class GraphEntityNotFound(ValueError):
+    """An anchor entity does not exist in the graph (or has no activity).
+
+    Subclasses ``ValueError`` so existing ``except ValueError`` callers keep
+    working; the message text is unchanged from iteration 1.
+    """
+
+
+class TransactionNotFound(GraphEntityNotFound):
+    """The anchor ``transaction_id`` is not in the graph."""
+
+
+class AccountNotFound(GraphEntityNotFound):
+    """The anchor ``account_key`` is not in the graph or has no activity."""
+
+
 def validate_transaction_id(value: Any) -> str:
     """Return the transaction ID or raise for empty/non-string input."""
     if not isinstance(value, str) or value.strip() == "":
@@ -153,8 +169,7 @@ def _trace_branch(direction: str, depth: int) -> str:
         )
         pattern = f"(anchor){segments}<-[:SENT]-(a{depth}:Account)"
     epoch_checks = " AND ".join(
-        f"t{i}.timestamp_epoch >= anchor.timestamp_epoch - $time_window_seconds "
-        f"AND t{i}.timestamp_epoch <= anchor.timestamp_epoch + $time_window_seconds"
+        f"t{i}.timestamp_epoch >= lo AND t{i}.timestamp_epoch <= hi"
         for i in range(1, depth + 1)
     )
     hop_columns = ",\n  ".join(
@@ -165,13 +180,20 @@ def _trace_branch(direction: str, depth: int) -> str:
         [f"a{i}.account_key AS account_key_{i}" for i in range(depth + 1)]
         + [f"NULL AS account_key_{i}" for i in range(depth + 1, MAX_HOPS + 1)]
     )
+    # The anchor is bound first and the window is projected once, so the
+    # planner expands from the indexed anchor instead of starting from a
+    # Transaction timestamp range scan. The whole path stays in one MATCH
+    # clause to keep Cypher relationship-uniqueness semantics unchanged.
     return f"""\
 MATCH (anchor:Transaction {{transaction_id: $transaction_id}})
+WITH anchor, anchor.timestamp_epoch - $time_window_seconds AS lo,
+  anchor.timestamp_epoch + $time_window_seconds AS hi
 MATCH {pattern}
 WHERE {epoch_checks}
 RETURN anchor.transaction_id AS anchor_id, {depth} AS depth,
   {hop_columns},
-  {key_columns}"""
+  {key_columns}
+LIMIT $result_limit"""
 
 
 def build_trace_query(direction: str, max_hops: int) -> str:
@@ -179,12 +201,18 @@ def build_trace_query(direction: str, max_hops: int) -> str:
 
     Both arguments must already be validated; the integers only select among
     fixed MATCH variants and never carry query values.
+
+    ``LIMIT $result_limit`` applies to every (direction, depth) branch. In
+    Cypher a trailing ``LIMIT`` after ``UNION`` binds only to the last
+    branch, so the iteration-1 query bounded only that branch and let the
+    others run to completion; the per-branch limit keeps each branch lazy and
+    bounded (at most ``result_limit`` paths per branch).
     """
     directions = (direction,) if direction in ("outgoing", "incoming") else ("outgoing", "incoming")
     branches = [
         _trace_branch(d, depth) for d in directions for depth in range(1, max_hops + 1)
     ]
-    return "\nUNION\n".join(branches) + "\nLIMIT $result_limit"
+    return "\nUNION\n".join(branches)
 
 
 TRACE_COUNTERPARTIES_BY_TX = """\
@@ -199,15 +227,24 @@ RETURN anchor.transaction_id AS transaction_id, anchor.timestamp AS timestamp,
 LIMIT 1
 """
 
+# Account-anchored statements bind the indexed account first (``WITH``) and
+# then expand its adjacency. Without the explicit binding the planner may
+# start from the Transaction.timestamp_epoch range index and scan every
+# transaction in the window (iteration-1 root cause). Counterparty keys come
+# from the loader-maintained ``sender_account_key``/``receiver_account_key``
+# Transaction properties, which equal the adjacent Account key by
+# construction, so no second expansion per transfer is needed.
+
 TRACE_SIBLINGS_BY_TX = """\
 MATCH (anchor:Transaction {transaction_id: $transaction_id})
-MATCH (sender:Account)-[:SENT]->(anchor)-[:RECEIVED]->(receiver:Account)
-MATCH (sender)-[:SENT]->(t:Transaction)-[:RECEIVED]->(other:Account)
+MATCH (sender:Account)-[:SENT]->(anchor)
+WITH anchor, sender, anchor.timestamp_epoch - $time_window_seconds AS lo,
+  anchor.timestamp_epoch + $time_window_seconds AS hi
+MATCH (sender)-[:SENT]->(t:Transaction)
 WHERE t.transaction_id <> anchor.transaction_id
-  AND t.timestamp_epoch >= anchor.timestamp_epoch - $time_window_seconds
-  AND t.timestamp_epoch <= anchor.timestamp_epoch + $time_window_seconds
+  AND t.timestamp_epoch >= lo AND t.timestamp_epoch <= hi
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
-  sender.account_key AS sender_key, other.account_key AS receiver_key,
+  sender.account_key AS sender_key, t.receiver_account_key AS receiver_key,
   t.amount_paid AS amount_paid, t.payment_currency AS payment_currency,
   t.amount_received AS amount_received, t.receiving_currency AS receiving_currency,
   t.payment_format AS payment_format
@@ -215,21 +252,35 @@ ORDER BY t.timestamp_epoch
 LIMIT $result_limit
 """
 
+#: O(1) lookup of the loader-maintained latest activity epoch.
+TRACE_ACCOUNT_LAST_EPOCH = """\
+MATCH (a:Account {account_key: $account_key})
+RETURN a.last_epoch AS epoch
+LIMIT 1
+"""
+
+#: Fallback for graphs loaded before ``last_epoch`` existed: the maximum
+#: sent-or-received epoch, aggregated per direction from the bound account.
 TRACE_ACCOUNT_LATEST_EPOCH = """\
-MATCH (a:Account {account_key: $account_key})-[:SENT]->(t:Transaction)
-RETURN t.timestamp_epoch AS epoch
-UNION
-MATCH (a:Account {account_key: $account_key})<-[:RECEIVED]-(t:Transaction)
-RETURN t.timestamp_epoch AS epoch
-ORDER BY epoch DESC
+MATCH (a:Account {account_key: $account_key})
+OPTIONAL MATCH (a)-[:SENT]->(s:Transaction)
+WITH a, max(s.timestamp_epoch) AS sent_max
+OPTIONAL MATCH (a)<-[:RECEIVED]-(r:Transaction)
+WITH sent_max, max(r.timestamp_epoch) AS received_max
+WITH CASE WHEN received_max IS NULL OR sent_max >= received_max
+  THEN sent_max ELSE received_max END AS epoch
+WHERE epoch IS NOT NULL
+RETURN epoch
 LIMIT 1
 """
 
 TRACE_COUNTERPARTIES_BY_ACCOUNT = """\
-MATCH (a:Account {account_key: $account_key})-[:SENT]->(t:Transaction)-[:RECEIVED]->(other:Account)
+MATCH (a:Account {account_key: $account_key})
+WITH a
+MATCH (a)-[:SENT]->(t:Transaction)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
-  a.account_key AS sender_key, other.account_key AS receiver_key,
+  a.account_key AS sender_key, t.receiver_account_key AS receiver_key,
   t.amount_paid AS amount_paid, t.payment_currency AS payment_currency,
   t.amount_received AS amount_received, t.receiving_currency AS receiving_currency,
   t.payment_format AS payment_format, 'sent' AS involvement
@@ -238,10 +289,12 @@ LIMIT $result_limit
 """
 
 TRACE_COUNTERPARTIES_BY_ACCOUNT_INCOMING = """\
-MATCH (a:Account {account_key: $account_key})<-[:RECEIVED]-(t:Transaction)<-[:SENT]-(other:Account)
+MATCH (a:Account {account_key: $account_key})
+WITH a
+MATCH (a)<-[:RECEIVED]-(t:Transaction)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
-  other.account_key AS sender_key, a.account_key AS receiver_key,
+  t.sender_account_key AS sender_key, a.account_key AS receiver_key,
   t.amount_paid AS amount_paid, t.payment_currency AS payment_currency,
   t.amount_received AS amount_received, t.receiving_currency AS receiving_currency,
   t.payment_format AS payment_format, 'received' AS involvement
@@ -249,55 +302,87 @@ ORDER BY t.timestamp_epoch DESC
 LIMIT $result_limit
 """
 
-TRACE_FAN_GATE_OUT = """\
-MATCH (a:Account {account_key: $account_key})-[:SENT]->(t:Transaction)-[:RECEIVED]->(other:Account)
+# Fan gate and detail run as one statement: a single expansion of the
+# anchor's windowed transfers yields the distinct-counterparty count, the
+# transfer count, and (only when the threshold is met) the earliest
+# ``result_limit`` transfers in timestamp order.
+_FAN_TEMPLATE = """\
+MATCH (a:Account {{account_key: $account_key}})
+WITH a
+MATCH {expand}
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
-RETURN count(DISTINCT other) AS distinct_counterparties, count(t) AS transfers
+WITH t ORDER BY t.timestamp_epoch
+WITH count(DISTINCT t.{counterparty}) AS distinct_counterparties,
+  count(t) AS transfers, collect(t) AS ordered
+RETURN distinct_counterparties, transfers,
+  CASE WHEN distinct_counterparties >= $min_fanout
+    THEN [x IN ordered[0..$result_limit] | [x.{counterparty}, x.transaction_id,
+      x.timestamp, x.amount_paid, x.payment_currency, x.amount_received,
+      x.receiving_currency]]
+    ELSE [] END AS details
 """
 
-TRACE_FAN_DETAIL_OUT = """\
-MATCH (a:Account {account_key: $account_key})-[:SENT]->(t:Transaction)-[:RECEIVED]->(other:Account)
+TRACE_FAN_OUT = _FAN_TEMPLATE.format(
+    expand="(a)-[:SENT]->(t:Transaction)", counterparty="receiver_account_key"
+)
+TRACE_FAN_IN = _FAN_TEMPLATE.format(
+    expand="(a)<-[:RECEIVED]-(t:Transaction)", counterparty="sender_account_key"
+)
+
+# Pass-through runs in three bounded statements plus client-side pairing, so
+# a busy middle account never materializes the in x out cross product:
+#
+# 1. ``TRACE_PASS_THROUGH_OUT_HISTOGRAM``: per-epoch counts of the windowed
+#    outgoing legs, encoded as one integer per epoch (small payload).
+# 2. ``TRACE_PASS_THROUGH_FIRST_INCOMING``: the first ``result_limit``
+#    incoming legs in (epoch, transaction ID) order that have at least one
+#    outgoing leg within ``dwell_seconds`` (qualification is an interval test
+#    derived from the histogram). Every qualifying incoming leg contributes at
+#    least one pair, so no later leg can enter the first ``result_limit``
+#    pairs.
+# 3. ``TRACE_PASS_THROUGH_DETAIL``: the outgoing legs at only the epochs the
+#    selected pairs need, joined to the selected incoming legs by ID.
+HISTOGRAM_SHIFT = 4_294_967_296  # 2**32: (epoch - min_epoch) * shift + count
+
+TRACE_PASS_THROUGH_OUT_HISTOGRAM = """\
+MATCH (b:Account {account_key: $account_key})
+WITH b
+MATCH (b)-[:SENT]->(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
-RETURN other.account_key AS counterparty_key,
-  t.transaction_id AS transaction_id, t.timestamp AS timestamp,
-  t.amount_paid AS amount_paid, t.payment_currency AS payment_currency,
-  t.amount_received AS amount_received, t.receiving_currency AS receiving_currency
-ORDER BY t.timestamp_epoch
-LIMIT $result_limit
+WITH t.timestamp_epoch AS e, count(t) AS c
+RETURN collect((e - $min_epoch) * 4294967296 + c) AS histogram
 """
 
-TRACE_FAN_GATE_IN = """\
-MATCH (other:Account)-[:SENT]->(t:Transaction)-[:RECEIVED]->(a:Account {account_key: $account_key})
+TRACE_PASS_THROUGH_FIRST_INCOMING = """\
+MATCH (b:Account {account_key: $account_key})
+WITH b
+MATCH (b)<-[:RECEIVED]-(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
-RETURN count(DISTINCT other) AS distinct_counterparties, count(t) AS transfers
+  AND any(iv IN $intervals WHERE t.timestamp_epoch >= iv[0] AND t.timestamp_epoch <= iv[1])
+WITH t ORDER BY t.timestamp_epoch, t.transaction_id LIMIT $result_limit
+RETURN collect([t.transaction_id, t.timestamp_epoch]) AS incoming
 """
 
-TRACE_FAN_DETAIL_IN = """\
-MATCH (other:Account)-[:SENT]->(t:Transaction)-[:RECEIVED]->(a:Account {account_key: $account_key})
-WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
-RETURN other.account_key AS counterparty_key,
-  t.transaction_id AS transaction_id, t.timestamp AS timestamp,
-  t.amount_paid AS amount_paid, t.payment_currency AS payment_currency,
-  t.amount_received AS amount_received, t.receiving_currency AS receiving_currency
-ORDER BY t.timestamp_epoch
-LIMIT $result_limit
-"""
-
-TRACE_PASS_THROUGH = """\
-MATCH (a1:Account)-[:SENT]->(t1:Transaction)-[:RECEIVED]->(b:Account {account_key: $account_key})
-MATCH (b)-[:SENT]->(t2:Transaction)-[:RECEIVED]->(a2:Account)
-WHERE t1.timestamp_epoch >= $min_epoch AND t1.timestamp_epoch <= $max_epoch
-  AND t2.timestamp_epoch <= $max_epoch
-  AND t2.timestamp_epoch >= t1.timestamp_epoch
-  AND t2.timestamp_epoch <= t1.timestamp_epoch + $dwell_seconds
-RETURN a1.account_key AS entry_key, b.account_key AS middle_key, a2.account_key AS exit_key,
+TRACE_PASS_THROUGH_DETAIL = """\
+MATCH (b:Account {account_key: $account_key})
+WITH b
+MATCH (b)-[:SENT]->(t2)
+WHERE t2.timestamp_epoch IN $out_epochs
+WITH t2 ORDER BY t2.transaction_id
+WITH t2.timestamp_epoch AS e2, collect(t2)[0..$result_limit] AS legs
+UNWIND $items AS item
+WITH item, legs WHERE e2 = item[2]
+UNWIND legs AS t2
+MATCH (t1:Transaction {transaction_id: item[1]})
+RETURN item[0] AS ordinal, t1.sender_account_key AS entry_key,
+  $account_key AS middle_key, t2.receiver_account_key AS exit_key,
   t1.transaction_id AS transaction_id_1, t1.timestamp AS timestamp_1,
   t1.amount_paid AS amount_paid_1, t1.payment_currency AS payment_currency_1,
   t1.amount_received AS amount_received_1, t1.receiving_currency AS receiving_currency_1,
   t2.transaction_id AS transaction_id_2, t2.timestamp AS timestamp_2,
   t2.amount_paid AS amount_paid_2, t2.payment_currency AS payment_currency_2,
   t2.amount_received AS amount_received_2, t2.receiving_currency AS receiving_currency_2
-ORDER BY t1.timestamp_epoch, t2.timestamp_epoch
+ORDER BY ordinal, transaction_id_2
 LIMIT $result_limit
 """
 
@@ -305,14 +390,15 @@ LIMIT $result_limit
 ALL_QUERIES: tuple[str, ...] = (
     TRACE_COUNTERPARTIES_BY_TX,
     TRACE_SIBLINGS_BY_TX,
+    TRACE_ACCOUNT_LAST_EPOCH,
     TRACE_ACCOUNT_LATEST_EPOCH,
     TRACE_COUNTERPARTIES_BY_ACCOUNT,
     TRACE_COUNTERPARTIES_BY_ACCOUNT_INCOMING,
-    TRACE_FAN_GATE_OUT,
-    TRACE_FAN_DETAIL_OUT,
-    TRACE_FAN_GATE_IN,
-    TRACE_FAN_DETAIL_IN,
-    TRACE_PASS_THROUGH,
+    TRACE_FAN_OUT,
+    TRACE_FAN_IN,
+    TRACE_PASS_THROUGH_OUT_HISTOGRAM,
+    TRACE_PASS_THROUGH_FIRST_INCOMING,
+    TRACE_PASS_THROUGH_DETAIL,
 )
 
 
@@ -357,21 +443,102 @@ def _require_anchor_tx(graph: Any, transaction_id: str, timeout_ms: int) -> dict
         ],
     )
     if not rows:
-        raise ValueError(f"unknown transaction_id: {transaction_id}")
+        raise TransactionNotFound(f"unknown transaction_id: {transaction_id}")
     return rows[0]
 
 
 def _latest_account_epoch(graph: Any, account_key: str, timeout_ms: int) -> int:
     """Return the latest sent-or-received epoch for an account or raise.
 
-    Covers both directions so receiver-only accounts remain investigable;
-    the UNION spans SENT and RECEIVED legs with the ordering applied to the
-    combined result (documented FalkorDB UNION semantics).
+    Covers both directions so receiver-only accounts remain investigable.
+    Reads the loader-maintained ``Account.last_epoch`` (one index lookup);
+    graphs loaded before that property existed fall back to aggregating the
+    maximum epoch over both legs. (The iteration-1 ``UNION ... ORDER BY ...
+    LIMIT 1`` statement ordered only its last branch, so it could return an
+    arbitrary sent epoch instead of the latest one.)
     """
-    result = _timed_query(graph, TRACE_ACCOUNT_LATEST_EPOCH, {"account_key": account_key}, timeout_ms)
+    params = {"account_key": account_key}
+    result = _timed_query(graph, TRACE_ACCOUNT_LAST_EPOCH, params, timeout_ms)
     if not result.result_set:
-        raise ValueError(f"unknown account_key or no account activity: {account_key}")
+        raise AccountNotFound(f"unknown account_key or no account activity: {account_key}")
+    if result.result_set[0][0] is not None:
+        return int(result.result_set[0][0])
+    result = _timed_query(graph, TRACE_ACCOUNT_LATEST_EPOCH, params, timeout_ms)
+    if not result.result_set or result.result_set[0][0] is None:
+        raise AccountNotFound(f"unknown account_key or no account activity: {account_key}")
     return int(result.result_set[0][0])
+
+
+def decode_histogram(encoded: list[Any], min_epoch: int) -> list[tuple[int, int]]:
+    """Decode ``(epoch - min_epoch) * 2**32 + count`` integers, sorted by epoch."""
+    pairs = [
+        (min_epoch + int(v) // HISTOGRAM_SHIFT, int(v) % HISTOGRAM_SHIFT) for v in encoded
+    ]
+    return sorted(pairs)
+
+
+def qualifying_intervals(
+    out_epochs: list[int], *, dwell_seconds: int, min_epoch: int, max_epoch: int
+) -> list[list[int]]:
+    """Epoch intervals of incoming legs with an outgoing leg within the dwell.
+
+    An incoming epoch ``e1`` qualifies iff some outgoing epoch ``e2`` has
+    ``e1 <= e2 <= e1 + dwell_seconds``. Outgoing epochs whose gaps are at
+    most ``dwell_seconds`` form clusters ``[s, f]``; each cluster admits
+    exactly ``[s - dwell_seconds, f]``. ``out_epochs`` must be sorted.
+    """
+    clusters: list[list[int]] = []
+    for epoch in out_epochs:
+        if clusters and epoch - clusters[-1][1] <= dwell_seconds:
+            clusters[-1][1] = epoch
+        else:
+            clusters.append([epoch, epoch])
+    return [
+        [max(start - dwell_seconds, min_epoch), min(end, max_epoch)]
+        for start, end in clusters
+    ]
+
+
+def plan_pass_through_items(
+    incoming: list[list[Any]],
+    out_histogram: list[tuple[int, int]],
+    *,
+    max_epoch: int,
+    dwell_seconds: int,
+    result_limit: int,
+) -> list[list[Any]]:
+    """Return ``[ordinal, t1_id, e2]`` items covering the first pairs.
+
+    Pairs are ordered by ``(t1.epoch, t2.epoch)`` as in iteration 1; ties
+    (left unspecified by iteration 1) are broken by incoming then outgoing
+    transaction ID. Each item expands to every outgoing leg at epoch ``e2``
+    (capped at ``result_limit``); items stop once they cover
+    ``result_limit`` pairs.
+    """
+    import bisect
+
+    out_epochs = [epoch for epoch, _ in out_histogram]
+    ordered = sorted((int(e), str(t)) for t, e in incoming)
+    items: list[list[Any]] = []
+    covered = 0
+    i = 0
+    while i < len(ordered) and covered < result_limit:
+        epoch = ordered[i][0]
+        group_end = i
+        while group_end < len(ordered) and ordered[group_end][0] == epoch:
+            group_end += 1
+        lo = bisect.bisect_left(out_epochs, epoch)
+        hi = bisect.bisect_right(out_epochs, min(epoch + dwell_seconds, max_epoch))
+        for j in range(lo, hi):
+            for k in range(i, group_end):
+                items.append([len(items), ordered[k][1], out_epochs[j]])
+                covered += min(out_histogram[j][1], result_limit)
+                if covered >= result_limit:
+                    break
+            if covered >= result_limit:
+                break
+        i = group_end
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -585,12 +752,15 @@ def detect_flow_patterns(
     ``fan_out``/``fan_in`` group the anchor's windowed transfers by distinct
     counterparty account and require at least ``min_fanout`` (2-10) distinct
     counterparties; matches are grouped per counterparty with supporting
-    transfer records. A gate query counts distinct counterparties first, so
-    an unmet threshold returns empty matches (with the observed count)
-    without pulling transfer details. ``pass_through`` finds two-transaction
-    chains through the anchor account where the second hop lands within
-    ``dwell_seconds`` after the first. Matches carry supporting transaction
-    IDs with timestamps and amounts/currencies.
+    transfer records. One statement counts distinct counterparties and, only
+    when the threshold is met, returns the earliest ``result_limit``
+    transfers, so an unmet threshold returns empty matches (with the
+    observed count). ``pass_through`` finds two-transaction chains through
+    the anchor account where the second hop lands within ``dwell_seconds``
+    after the first; candidate legs are fetched once and paired client-side
+    by a sorted merge, then at most ``result_limit`` pairs are fetched by
+    transaction ID. Matches carry supporting transaction IDs with timestamps
+    and amounts/currencies.
     """
     account_key = validate_account_key(account_key)
     pattern = validate_pattern(pattern)
@@ -611,20 +781,22 @@ def detect_flow_patterns(
     distinct_counterparties: int | None = None
     if pattern in ("fan_out", "fan_in"):
         min_fanout = validate_fanout(min_fanout)
-        gate_cypher = TRACE_FAN_GATE_OUT if pattern == "fan_out" else TRACE_FAN_GATE_IN
-        detail_cypher = TRACE_FAN_DETAIL_OUT if pattern == "fan_out" else TRACE_FAN_DETAIL_IN
-        gate = _timed_query(graph, gate_cypher, window, timeout_ms)
-        distinct_counterparties = int(gate.result_set[0][0])
+        fan_cypher = TRACE_FAN_OUT if pattern == "fan_out" else TRACE_FAN_IN
+        fan = _timed_query(graph, fan_cypher, {**window, "min_fanout": min_fanout}, timeout_ms)
+        distinct_counterparties = int(fan.result_set[0][0]) if fan.result_set else 0
+        details = fan.result_set[0][2] if fan.result_set else []
         if distinct_counterparties >= min_fanout:
-            result = _timed_query(graph, detail_cypher, window, timeout_ms)
             grouped: dict[str, dict[str, Any]] = {}
-            for row in _row_dicts(
-                result,
-                [
-                    "counterparty_key", "transaction_id", "timestamp",
-                    "amount_paid", "payment_currency", "amount_received",
-                    "receiving_currency",
-                ],
+            for row in (
+                dict(zip(
+                    [
+                        "counterparty_key", "transaction_id", "timestamp",
+                        "amount_paid", "payment_currency", "amount_received",
+                        "receiving_currency",
+                    ],
+                    detail,
+                ))
+                for detail in details
             ):
                 group = grouped.setdefault(
                     row["counterparty_key"],
@@ -648,21 +820,53 @@ def detect_flow_patterns(
                 group["transfer_count"] = len(transfers)
                 matches.append(group)
     else:
-        result = _timed_query(
-            graph, TRACE_PASS_THROUGH, {**window, "dwell_seconds": dwell_seconds}, timeout_ms
-        )
-        for row in _row_dicts(
-            result,
-            [
-                "entry_key", "middle_key", "exit_key",
-                "transaction_id_1", "timestamp_1",
-                "amount_paid_1", "payment_currency_1",
-                "amount_received_1", "receiving_currency_1",
-                "transaction_id_2", "timestamp_2",
-                "amount_paid_2", "payment_currency_2",
-                "amount_received_2", "receiving_currency_2",
-            ],
-        ):
+        histogram_result = _timed_query(graph, TRACE_PASS_THROUGH_OUT_HISTOGRAM, window, timeout_ms)
+        encoded = histogram_result.result_set[0][0] if histogram_result.result_set else []
+        out_histogram = decode_histogram(encoded or [], window["min_epoch"])
+        rows: list[list[Any]] = []
+        if out_histogram:
+            intervals = qualifying_intervals(
+                [epoch for epoch, _ in out_histogram],
+                dwell_seconds=dwell_seconds,
+                min_epoch=window["min_epoch"],
+                max_epoch=latest,
+            )
+            first = _timed_query(
+                graph, TRACE_PASS_THROUGH_FIRST_INCOMING, {**window, "intervals": intervals},
+                timeout_ms,
+            )
+            incoming = first.result_set[0][0] if first.result_set else []
+            items = plan_pass_through_items(
+                incoming or [],
+                out_histogram,
+                max_epoch=latest,
+                dwell_seconds=dwell_seconds,
+                result_limit=result_limit,
+            )
+            if items:
+                result = _timed_query(
+                    graph,
+                    TRACE_PASS_THROUGH_DETAIL,
+                    {
+                        "account_key": account_key,
+                        "out_epochs": sorted({item[2] for item in items}),
+                        "items": items,
+                        "result_limit": result_limit,
+                    },
+                    timeout_ms,
+                )
+                # Drop the leading ordinal column; rows arrive in pair order.
+                rows = [list(row[1:]) for row in result.result_set]
+        columns = [
+            "entry_key", "middle_key", "exit_key",
+            "transaction_id_1", "timestamp_1",
+            "amount_paid_1", "payment_currency_1",
+            "amount_received_1", "receiving_currency_1",
+            "transaction_id_2", "timestamp_2",
+            "amount_paid_2", "payment_currency_2",
+            "amount_received_2", "receiving_currency_2",
+        ]
+        for row in (dict(zip(columns, values)) for values in rows):
             matches.append(
                 {
                     "account_keys": [row["entry_key"], row["middle_key"], row["exit_key"]],
