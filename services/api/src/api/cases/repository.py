@@ -1,106 +1,120 @@
-"""Data access repository for cases and audit logs."""
+"""Data access for cases and their append-only review history."""
+
+from __future__ import annotations
 
 import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.cases.constants import CaseStatus, ReviewAction
-from api.cases.models import CaseModel, CaseReviewModel, _now_iso
+from api.cases.models import CaseModel, CaseReviewModel, now_iso
+from api.cases.schemas import CaseStatus, HistoryAction
 
 
 class CaseRepository:
-    """Async repository for querying cases and appending audit reviews."""
+    """Async repository; the only write paths are inserts and status moves."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def get_by_id(self, case_id: str) -> CaseModel | None:
-        """Fetch a case by its ID."""
-        stmt = select(CaseModel).where(CaseModel.case_id == case_id)
+        """Fetch a case with fresh history."""
+        stmt = (
+            select(CaseModel)
+            .where(CaseModel.case_id == case_id)
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def find_by_transaction(
+        self, transaction_id: str, statuses: tuple[CaseStatus, ...]
+    ) -> CaseModel | None:
+        """Return a case for the transaction in one of the given statuses."""
+        stmt = (
+            select(CaseModel)
+            .where(CaseModel.transaction_id == transaction_id)
+            .where(CaseModel.status.in_(statuses))
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_cases(
-        self,
-        status: CaseStatus | None = None,
-        limit: int = 50,
-        offset: int = 0,
+        self, status: CaseStatus | None, limit: int, offset: int
     ) -> tuple[list[CaseModel], int]:
-        """List cases with optional status filter and bounded pagination."""
+        """List cases, most recently updated first, with a total count."""
         query = select(CaseModel)
         count_query = select(func.count(CaseModel.case_id))
-
-        if status:
+        if status is not None:
             query = query.where(CaseModel.status == status)
             count_query = count_query.where(CaseModel.status == status)
+        query = (
+            query.order_by(CaseModel.updated_at.desc(), CaseModel.case_id)
+            .offset(offset)
+            .limit(limit)
+        )
+        total = (await self.session.execute(count_query)).scalar() or 0
+        items = list((await self.session.execute(query)).scalars().all())
+        return items, int(total)
 
-        query = query.order_by(CaseModel.updated_at.desc()).offset(offset).limit(limit)
+    def _append(
+        self,
+        case_id: str,
+        action: HistoryAction,
+        reviewer_id: str,
+        timestamp: str,
+        pattern_type: str | None = None,
+        notes: str | None = None,
+    ) -> None:
+        self.session.add(
+            CaseReviewModel(
+                review_id=f"rev-{uuid.uuid4().hex[:12]}",
+                case_id=case_id,
+                action=action,
+                reviewer_id=reviewer_id,
+                pattern_type=pattern_type,
+                notes=notes,
+                timestamp=timestamp,
+            )
+        )
 
-        total_result = await self.session.execute(count_query)
-        total = total_result.scalar() or 0
-
-        items_result = await self.session.execute(query)
-        items = list(items_result.scalars().all())
-
-        return items, total
+    async def create(
+        self, transaction_id: str, risk_score: float, opened_by: str, notes: str | None
+    ) -> str:
+        """Insert a suspected case plus its ``open`` history entry."""
+        case_id = f"case-{uuid.uuid4().hex[:12]}"
+        timestamp = now_iso()
+        self.session.add(
+            CaseModel(
+                case_id=case_id,
+                transaction_id=transaction_id,
+                status="suspected",
+                risk_score=risk_score,
+                opened_by=opened_by,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        await self.session.flush()
+        self._append(case_id, "open", opened_by, timestamp, notes=notes)
+        await self.session.commit()
+        return case_id
 
     async def record_review(
         self,
         case: CaseModel,
-        action: ReviewAction,
+        action: HistoryAction,
         reviewer_id: str,
-        pattern_type: str | None = None,
-        notes: str | None = None,
-    ) -> CaseModel:
-        """Append an immutable review audit entry and update case status.
+        pattern_type: str | None,
+        notes: str | None,
+    ) -> None:
+        """Append one review entry and move the case status.
 
-        Dismissal preserves the transaction history and audit record and does not erase data.
+        Prior entries are never modified; dismissal keeps every record.
         """
-        review = CaseReviewModel(
-            review_id=f"rev_{uuid.uuid4().hex[:12]}",
-            case_id=case.case_id,
-            action=action,
-            reviewer_id=reviewer_id,
-            pattern_type=pattern_type,
-            notes=notes,
-            timestamp=_now_iso(),
-        )
-        self.session.add(review)
-
-        # Update case status
+        timestamp = now_iso()
+        self._append(case.case_id, action, reviewer_id, timestamp, pattern_type, notes)
         case.status = "confirmed" if action == "confirm" else "dismissed"
-        case.updated_at = _now_iso()
-        await self.session.commit()
-        await self.session.refresh(case)
-        return case
-
-    async def seed_initial_cases(self) -> None:
-        """Ensure initial seed cases exist for demonstration/replay."""
-        total_stmt = select(func.count(CaseModel.case_id))
-        total = (await self.session.execute(total_stmt)).scalar() or 0
-        if total > 0:
-            return
-
-        seeds = [
-            CaseModel(
-                case_id="case_001_8492",
-                transaction_id="tx_hi_000184",
-                status="suspected",
-                risk_score=0.92,
-            ),
-            CaseModel(
-                case_id="case_002_4491",
-                transaction_id="tx_hi_000219",
-                status="under_review",
-                risk_score=0.74,
-            ),
-            CaseModel(
-                case_id="case_003_1204",
-                transaction_id="tx_hi_000305",
-                status="dismissed",
-                risk_score=0.42,
-            ),
-        ]
-        self.session.add_all(seeds)
+        case.updated_at = timestamp
         await self.session.commit()

@@ -1,94 +1,79 @@
-"""FastAPI entrypoint re-exporting the application from api.main."""
+"""Typed FastAPI application for the TraceAML API service.
 
-from pathlib import Path
-from typing import Annotated, Any
+This module is the single service entrypoint (``api.app:app``), used by
+``make dev-api``, the README commands, and the container image.
+"""
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Annotated
+
+import anyio.to_thread
+from fastapi import Depends, FastAPI, Query
 
 from api import schemas
-from api.graph import GraphUnavailable, open_graph, probe_graph
-from api.investigate import (
-    FalkorGraphTools,
-    GraphTools,
-    InvestigationFailure,
-    build_investigation,
+from api.cases.router import router as cases_router
+from api.database import CaseDatabase
+from api.dependencies import (
+    SettingsDep,
+    get_graph_tools,
+    get_score_repository,
+    read_benchmarks,
+    read_threshold,
+    resolve_path,
 )
+from api.exceptions import TransactionNotFoundError, setup_exception_handlers
+from api.graph import SOCKET_TIMEOUT_MARGIN_SECONDS, close_graph_pools, probe_graph
+from api.investigate import GraphTools, build_investigation
 from api.scores import (
     ScoreArtifactInvalid,
     ScoreArtifactUnavailable,
     ScoreRepository,
     load_scores,
 )
-from api.settings import REPOSITORY_ROOT, Settings, get_settings
+from api.settings import Settings
+
+__all__ = ["app", "create_app", "get_graph_tools", "get_score_repository"]
+
+# Sequential database calls per tool, worst case: stage one tools run two
+# queries, pattern tools three. Used to bound the whole evidence phase.
+QUERIES_PER_INVESTIGATION_PATH = 5
 
 
-def resolve_path(value: str) -> Path:
-    """Resolve a configured path relative to the repository root."""
-    path = Path(value)
-    return path if path.is_absolute() else REPOSITORY_ROOT / path
+def investigation_wait_seconds(settings: Settings) -> float:
+    """Upper bound for the evidence phase derived from the per-query timeout."""
+    per_query = settings.graph_query_timeout_ms / 1000.0
+    return QUERIES_PER_INVESTIGATION_PATH * per_query + 2 * SOCKET_TIMEOUT_MARGIN_SECONDS
 
 
-def get_score_repository(settings: Annotated[Settings, Depends(get_settings)]) -> ScoreRepository:
-    """Load the target-free score artifact or raise an explicit service error."""
-    try:
-        return load_scores(str(resolve_path(settings.score_artifact)))
-    except (ScoreArtifactUnavailable, ScoreArtifactInvalid) as exc:
-        raise HTTPException(status_code=503, detail="score artifact unavailable") from exc
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Build the FastAPI application with settings captured once."""
+    resolved = settings if settings is not None else Settings()
+    case_db = CaseDatabase(resolve_path(resolved.case_db_path))
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # Warm the cached score artifact so the first queue read is not the
+        # one paying for the parquet load; absence is reported per request.
+        try:
+            await anyio.to_thread.run_sync(
+                load_scores, str(resolve_path(resolved.score_artifact))
+            )
+        except (ScoreArtifactUnavailable, ScoreArtifactInvalid):
+            pass
+        yield
+        await case_db.close()
+        close_graph_pools()
 
-def read_threshold(settings: Settings) -> float:
-    """Read the locked validation threshold for the configured score model."""
-    import json
-
-    try:
-        config = json.loads(resolve_path(settings.baseline_config_path).read_text(encoding="utf-8"))
-        return float(config["thresholds"][settings.score_model])
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(status_code=503, detail="decision threshold unavailable") from exc
-
-
-def get_graph_tools(settings: Annotated[Settings, Depends(get_settings)]) -> GraphTools:
-    """Open the FalkorDB graph or raise an explicit service error."""
-    try:
-        graph = open_graph(settings.falkordb_host, settings.falkordb_port, settings.graph_name)
-    except GraphUnavailable as exc:
-        raise HTTPException(status_code=503, detail="graph unavailable") from exc
-    return FalkorGraphTools(graph)
-
-
-def read_benchmarks(settings: Settings) -> schemas.BenchmarksResponse:
-    """Load benchmark metrics or raise an explicit service error."""
-    import json
-
-    try:
-        payload = json.loads(
-            resolve_path(settings.baseline_metrics_path).read_text(encoding="utf-8")
-        )
-        if "models" not in payload:
-            payload = {"models": payload}
-        graph_metrics_path = resolve_path(settings.graph_metrics_path)
-        if graph_metrics_path.is_file():
-            graph_payload = json.loads(graph_metrics_path.read_text(encoding="utf-8"))
-            graph_models = graph_payload.get("models", graph_payload)
-            if not isinstance(graph_models, dict):
-                raise ValueError("graph benchmark artifact must contain a models object")
-            for model_name, metrics in graph_models.items():
-                payload["models"].setdefault(model_name, metrics)
-        performance_path = resolve_path(settings.performance_path)
-        if performance_path.is_file():
-            payload["performance"] = json.loads(performance_path.read_text(encoding="utf-8"))
-        return schemas.BenchmarksResponse.model_validate(payload)
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail="benchmark artifact unavailable") from exc
-
-
-def create_app() -> FastAPI:
-    """Build the FastAPI application."""
-    app = FastAPI(title="TraceAML API", version="0.1.0")
+    app = FastAPI(title="TraceAML API", version=resolved.app_version, lifespan=lifespan)
+    app.state.settings = resolved
+    app.state.case_db = case_db
+    setup_exception_handlers(app)
 
     @app.get("/api/health", response_model=schemas.HealthResponse)
-    def get_health(settings: Annotated[Settings, Depends(get_settings)]) -> schemas.HealthResponse:
+    def get_health(settings: SettingsDep) -> schemas.HealthResponse:
         return schemas.HealthResponse(
             status="ok",
             falkordb=probe_graph(settings.falkordb_host, settings.falkordb_port),
@@ -97,7 +82,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/alerts", response_model=schemas.AlertsResponse)
     def get_alerts(
-        settings: Annotated[Settings, Depends(get_settings)],
+        settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
@@ -115,40 +100,32 @@ def create_app() -> FastAPI:
         return schemas.AlertsResponse(items=items, total=len(repo), limit=limit, offset=offset)
 
     @app.get("/api/benchmarks", response_model=schemas.BenchmarksResponse)
-    def get_benchmarks(
-        settings: Annotated[Settings, Depends(get_settings)],
-    ) -> schemas.BenchmarksResponse:
+    def get_benchmarks(settings: SettingsDep) -> schemas.BenchmarksResponse:
         return read_benchmarks(settings)
 
     @app.post("/api/investigations", response_model=schemas.InvestigationResponse)
     def post_investigation(
         request: schemas.InvestigationRequest,
-        settings: Annotated[Settings, Depends(get_settings)],
+        settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
         tools: Annotated[GraphTools, Depends(get_graph_tools)],
     ) -> schemas.InvestigationResponse:
         score = repo.score_for(request.transaction_id)
         if score is None:
-            raise HTTPException(status_code=404, detail="transaction not scored")
+            raise TransactionNotFoundError()
         threshold = read_threshold(settings)
-        try:
-            return build_investigation(
-                request.transaction_id,
-                score,
-                threshold,
-                tools,
-                max_hops=request.max_hops,
-                time_window_seconds=request.time_window_seconds,
-                result_limit=request.result_limit,
-            )
-        except InvestigationFailure as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return build_investigation(
+            request.transaction_id,
+            score,
+            threshold,
+            tools,
+            max_hops=request.max_hops,
+            time_window_seconds=request.time_window_seconds,
+            result_limit=request.result_limit,
+            wait_timeout_seconds=investigation_wait_seconds(settings),
+        )
 
-    @app.exception_handler(Exception)
-    async def unhandled_handler(_request: Any, _exc: Exception) -> JSONResponse:
-        """Last-resort guard: never leak raw exception text."""
-        return JSONResponse(status_code=500, content={"detail": "internal error"})
-
+    app.include_router(cases_router)
     return app
 
 

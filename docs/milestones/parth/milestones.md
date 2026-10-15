@@ -38,6 +38,9 @@ API responses validate against shared contracts, service failures return typed e
 - **Complete:** benchmark response merges `lgbm_graph` metrics when the configured graph-ablation artifact exists, without replacing canonical baseline entries.
 - **Complete:** benchmark response includes the validated measured-performance snapshot from `TRACEAML_PERFORMANCE_PATH` when configured.
 - **Verified:** live API investigation against the 998,021-transaction target-free demo graph returned validated evidence for a held-out case.
-- **Pending:** optional LLM integration, case persistence/review history, and visual analyst review of the frontend integration.
-- **Verification:** API Ruff checks pass and 21 tests pass. Local Next.js route and `/api` proxy return HTTP 200.
+- **Complete (Iteration 2):** one application entrypoint, `api.app:app`, shared by `make dev-api`, the README, and the container image. The parallel `api.main` rewrite was removed: it served hardcoded alerts, seeded fake cases, read graph properties that do not exist, and broke the published response contract.
+- **Complete (Iteration 2):** case persistence and review history (`/api/cases`): cases open only from scored transaction IDs, `confirm`/`dismiss` record reviewer provenance, history is append-only at the storage layer, and dismissal never erases records. The SQLAlchemy models and review audit trail build on the cases module from commit `3fa06fd`.
+- **Complete (Iteration 2):** investigation tools run concurrently over a pooled, reused FalkorDB connection set; `query_duration_ms` reports evidence-phase wall time, and `tool_durations_ms` reports per-tool time. Domain errors map to typed 404/409/503/504 responses through centralized handlers.
+- **Pending:** optional LLM integration, graph-side case/ring links on confirmation, and visual analyst review of the frontend integration.
+- **Verification:** API Ruff checks pass; `uv run --directory services/api pytest -q` passes, including a live FalkorDB investigation test on a disposable `agentapi-test` graph (skipped when FalkorDB is unreachable). The container image builds from the repository root with `docker build -f services/api/Dockerfile .`.
 - **Review handoff:** integration implementation touched `services/api/`; review it against this ownership charter before extending backend behavior.

@@ -87,3 +87,13 @@ The HI-Small v8 transaction file contains 9 exact duplicate rows across its 11 s
 Sort every joined train/validation/test split by transaction ID before encoding. Train LightGBM 4.7 in documented deterministic CPU mode with fixed seeds and thread count, native categorical features, and validation early stopping; keep logistic regression on the identical feature set and split. Record package versions, thread settings, seeds, and feature/split manifest hashes in each run config. Two clean-directory reruns must reproduce predictions and metrics exactly (tolerance: bitwise identity); record any deviation with its magnitude instead of averaging it away.
 
 Report validation-threshold results and fixed review-capacity results as distinct framings. The max-F1 validation threshold admits a variable-size alert set and answers "how does the tuned operating point perform". The predeclared 0.1% alert budget admits exactly that many top-scored test transactions and answers "what fits a fixed review capacity". Never present a budget-selected set as threshold performance or vice versa. Day-level model metrics additionally require at least 10 positives per day; thinner days report counts only.
+
+## ADR-015: One API entrypoint with concurrent, pooled graph tools
+
+**Status:** Accepted
+
+The API has a single application, `api.app:app`, used by `make dev-api`, the service README, and the container image. A parallel rewrite (`api.main`) that served hardcoded alerts, seeded fake cases, and queried graph properties absent from the loader schema was removed; its case-review module was kept and rebuilt on the score artifact, without seed data.
+
+Investigation tools run concurrently on a bounded thread pool. Each worker thread holds its own falkordb-py graph handle (the handle caches schema state) over one shared, bounded Redis connection pool per process, so requests reuse sockets instead of connecting per request. Pattern queries start as soon as either stage-one tool returns the anchor transfer's account keys. Every query keeps its server-side timeout, and the evidence phase has an overall deadline derived from it. Evidence merges in a fixed order, so concurrency does not change results. `query_duration_ms` now reports evidence-phase wall time, with per-tool durations in `tool_durations_ms`. Iteration 1 measurements summed serial tool time and are not directly comparable.
+
+Case history is append-only in SQLite (`TRACEAML_CASE_DB_PATH`), enforced by triggers. Graph-side case links are deferred.
