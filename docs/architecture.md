@@ -1,162 +1,81 @@
-# Architecture Specification: Tripwire
+# TraceAML Architecture
 
-## 1. Overview & System Boundaries
+## System boundaries
 
-Tripwire is a graph-native fraud investigation platform designed for fraud and AML analysts. It processes incoming transactions, evaluates suspicious money-flow topologies via FalkorDB, surfaces inspectable multi-hop graph evidence, and records analyst-confirmed cases in an auditable graph memory store.
+TraceAML is a local-first investigation workbench for replaying synthetic AML transactions. The first iteration includes data preparation and model evaluation, a FalkorDB-backed investigation service, deterministic decision policy, evidence validation, and an analyst UI.
 
-### System Boundaries
+It does not connect to banks, freeze funds, file regulatory reports, or claim production effectiveness. Distributed queues, Redis, vector search, Kubernetes, graph neural networks, and model fine-tuning are deferred.
 
-- **In-Scope**:
-  - Replay and ingestion of synthetic AML transfer data (IBM AMLworld HI-Small).
-  - Graph database storage, schema enforcement, and bounded query execution in FalkorDB.
-  - Multi-hop topological feature extraction (fan-in, fan-out, cycles, scatter-gather flows).
-  - Hybrid scoring pipeline: Tabular baseline, graph-derived structural features, optional typed LLM assessment.
-  - Deterministic policy engine mapping scores and rules to `allow`, `review`, and simulated `block`.
-  - Analyst investigation workspace with Cytoscape.js interactive graph canvas and evidence inspection.
-  - Case memory management with provenance and explicit review gate.
-  - Reproducible benchmark and graph ablation harness.
+## Repository map
 
-- **Out-of-Scope (Hackathon Baseline)**:
-  - Real-world banking or payment gateway integrations.
-  - Actual account blocking, fund freezes, or regulatory SAR filing.
-  - Distributed message brokers (Kafka, RabbitMQ) and distributed caching (Redis).
-  - Unbounded graph traversal or GNN training before baseline validation.
-
----
-
-## 2. High-Level Architecture
-
-```mermaid
-flowchart TD
-    subgraph DataIngestion ["Data & Replay"]
-        Dataset[("AMLworld Dataset (CSV)")] --> ReplayService["Replay Orchestrator (FastAPI)"]
-        ReplayService --> PreFilter{"Rules Pre-Filter"}
-    end
-
-    subgraph GraphStorage ["Graph Database"]
-        FalkorDB[("FalkorDB (tripwire graph)")]
-    end
-
-    subgraph DetectionEngine ["Detection & Scoring"]
-        PreFilter -->|Candidate Alert| GraphService["Graph Feature Extractor"]
-        GraphService <-->|Bounded Cypher| FalkorDB
-        GraphService --> FeatureUnion["Feature Vector Assembler"]
-        FeatureUnion --> TabularModel["LightGBM / Tabular Model"]
-        FeatureUnion -.->|Structured Context| LLMAdapter["Jev Adapter / Fallback"]
-        TabularModel --> PolicyEngine["Deterministic Policy Engine"]
-        LLMAdapter --> PolicyEngine
-    end
-
-    subgraph Persistence ["Decision & Audit Store"]
-        PolicyEngine --> DecisionStore[("Audit & Run Store (SQLite)")]
-    end
-
-    subgraph Presentation ["Analyst Workstation (Next.js)"]
-        PolicyEngine -->|Server-Sent Events| SSEStream["/api/events"]
-        SSEStream --> UIQueue["Review Queue (/queue)"]
-        UIQueue --> UIWorkspace["Investigation Canvas (/investigations/[id])"]
-        UIWorkspace <-->|Cytoscape Subgraph| APIClient["FastAPI Backend"]
-        APIClient <--> FalkorDB
-    end
-
-    subgraph CaseMemory ["Case & Memory Management"]
-        UIWorkspace -->|Analyst Confirmation| CaseReview["Case Controller"]
-        CaseReview -->|Write Confirmed Case| FalkorDB
-    end
+```text
+apps/web/                 Next.js analyst workbench
+services/api/             FastAPI, policy, investigation orchestration
+ml/                       Data inspection, preparation, features, models, metrics
+graph/                    FalkorDB schema, indexes, and Cypher query definitions
+data/raw/                 User-provided source data; ignored by Git
+data/processed/           Normalized Parquet and split artifacts; ignored by Git
+artifacts/                Generated models and benchmark runs; ignored by Git
+docs/                     Product, architecture, contracts, decisions, role charters
+compose.yaml              Local FalkorDB service
 ```
 
----
-
-## 3. Subsystem Breakdown
-
-### 3.1 Frontend Workstation (`apps/web`)
-- **Technology**: Next.js App Router, React 19, TypeScript, Tailwind CSS, shadcn/ui, Cytoscape.js, TanStack Query.
-- **Role**: High-density analytical interface for triage, investigation, case review, and benchmark inspection.
-- **Key Modules**:
-  - `QueueView`: Virtualized table displaying real-time stream of transactions and alerts.
-  - `GraphWorkspace`: Cytoscape.js canvas rendering bounded transaction neighbourhoods and highlighted evidence paths.
-  - `EvidenceInspector`: Attribute inspection for nodes, transfers, and structural indicators.
-  - `CaseManager`: Interface for promoting or dismissing suspected fraud rings.
-  - `BenchmarkViewer`: Reproducible metrics, ROC/PR curves, and typology breakdowns.
-
-### 3.2 Backend & API Service (`backend/api`)
-- **Technology**: Python 3.12+, FastAPI, Pydantic v2, Uvicorn, managed via `uv`.
-- **Role**: RESTful API endpoints, SSE event broadcasting, and lifecycle coordination.
-- **Key Modules**:
-  - `replay_orchestrator`: Deterministic clock managing transaction generation, pause, and reset.
-  - `sse_broadcaster`: Lightweight Server-Sent Events channel streaming alerts to connected clients.
-  - `investigation_router`: Dispatcher orchestrating graph retrieval, scoring, and policy evaluation.
-
-### 3.3 Graph Engine (`backend/graph`)
-- **Technology**: Official `falkordb` Python client, Cypher query suite.
-- **Role**: Authoritative persistence of accounts, transactions, cases, and ring associations.
-- **Key Queries**:
-  - Bounded multi-hop neighbourhood retrieval around source and destination accounts.
-  - Temporal fan-in and fan-out aggregation within configurable lookback windows.
-  - Directed cycle detection up to depth $k$.
-  - Shortest path between flagged accounts and prior confirmed fraud cases.
-
-### 3.4 Detection & Model Service (`backend/detector`)
-- **Technology**: scikit-learn, LightGBM / XGBoost, NumPy, Pandas.
-- **Role**: Combines raw transaction metadata with graph-extracted topological signals.
-- **Pipelines**:
-  - `tabular_baseline`: Evaluates local transaction properties (amount, velocity, counterparty frequency).
-  - `graph_augmented`: Concatenates structural metrics (degree centrality, cycle participation, scatter-gather indicators).
-  - `llm_adapter`: Assembles a compact JSON prompt representing graph topology for typed evaluation via Jev (with deterministic heuristic fallback).
-
-### 3.5 Deterministic Policy Engine (`backend/policy`)
-- **Technology**: Pure Python rule evaluator.
-- **Role**: Decouples model scoring from actionable enforcement.
-- **Invariants**:
-  - Enforces deterministic thresholds on validated model scores.
-  - Routes malformed model outputs or provider timeouts to a safe fallback (`review`).
-  - Emits immutable decision records containing timestamp, rule ID, model version, and computed evidence.
-
-### 3.6 Case Memory Controller (`backend/memory`)
-- **Technology**: FalkorDB Cypher mutators, SQLite provenance tracking.
-- **Role**: Manages the transition of alerts from `suspected` to `confirmed` or `dismissed`.
-- **Invariants**:
-  - Only human analyst confirmation can write a confirmed `Ring` or link a `Case` to the graph.
-  - Replay and evaluation pipelines must never write test set records into case memory.
-
----
-
-## 4. End-to-End Data Flow
+## Component flow
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Analyst as Fraud Analyst
-    participant Replay as Replay Engine
-    participant Graph as FalkorDB
-    participant Detector as Detection Pipeline
-    participant Policy as Policy Engine
-    participant UI as Next.js Workstation
-
-    Replay->>Detector: Emit candidate transaction
-    Detector->>Graph: Execute bounded neighbourhood & path Cypher
-    Graph-->>Detector: Subgraph entities & topology metrics
-    Detector->>Detector: Calculate graph features + tabular score
-    Detector->>Policy: Submit score & evidence payload
-    Policy->>Policy: Evaluate action rules (allow / review / block)
-    Policy-->>UI: Publish SSE event to Queue
-    Analyst->>UI: Select alert for investigation
-    UI->>Graph: Request visual subgraph & evidence path
-    Graph-->>UI: Node/edge graph payload
-    UI->>Analyst: Render Cytoscape canvas with highlighted path
-    Analyst->>UI: Confirm case as fraud ring
-    UI->>Graph: Write :Case and :Ring nodes with audit provenance
-    Graph-->>UI: Mutation confirmed
+flowchart LR
+    CSV["IBM AMLworld CSVs"] --> Inspect["Profile and validate"]
+    Inspect --> Parquet["Normalized Parquet"]
+    Parquet --> Split["Chronological split and past-only features"]
+    Split --> Models["Logistic / LightGBM / LightGBM + graph features"]
+    Parquet --> Loader["Idempotent graph loader"]
+    Loader --> Graph[("FalkorDB")]
+    Models --> API["FastAPI scoring and policy"]
+    Graph --> Tools["Bounded investigation tools"]
+    API --> UI["Next.js analyst workbench"]
+    Tools --> Verifier["Evidence validation"]
+    Verifier --> Report["Structured investigation report"]
+    Report --> UI
+    API --> Audit[("Audit records")]
 ```
 
----
+## Data and evaluation
 
-## 5. Resilience & Failure Modes
+Parquet is the analytical source of truth. A profiling and preparation job validates the exact dataset version, records file hashes and schema, normalizes composite account identifiers, and writes a split manifest. Use Polars for transforms, DuckDB for local analytical queries, and PyArrow/Parquet for durable intermediate tables.
 
-| Subsystem Failure | Impact | Mitigation Strategy |
-| :--- | :--- | :--- |
-| **FalkorDB Offline** | Cannot query or persist graph topology | Fast fail with HTTP 503. Log error; do not pretend graph evaluation occurred. |
-| **LLM / Jev Timeout** | LLM assessment unavailable | Fallback immediately to deterministic policy and tabular model score. Route to manual review. |
-| **Malformed LLM Output** | Invalid JSON or schema violation | Pydantic validation rejects payload; fallback policy triggers without pipeline crash. |
-| **High-Degree Account Hub** | Traversal query explosion | Hard cap on Cypher search depth ($k \le 3$) and result count ($N \le 100$). |
-| **SSE Connection Drop** | Frontend misses transaction ticks | Client automatically reconnects via `EventSource` and requests catch-up diff from `/api/transactions`. |
+Use a chronological train/validation/test split when the supplied timestamps permit it. Feature construction for transaction `t` may use only information available at or before `t`. Keep labels and typology ground truth in the offline evaluation path. They must not be written to the inference graph or returned by inference queries.
+
+The first benchmark ladder is logistic regression, LightGBM with tabular and historical behavior features, and LightGBM with the same features plus graph-derived features. Train and tune without reading the frozen test labels, and report all models on the same held-out cohort.
+
+## FalkorDB graph
+
+FalkorDB is the authoritative source for transaction topology and structural investigation evidence. The initial graph contains `Account` and `Transaction` nodes connected by `SENT` and `RECEIVED` relationships. Transaction nodes carry a stable source transaction ID, timestamp, amounts, currencies, and payment type as supported by the input schema. Account keys include institution or bank when account IDs are reused.
+
+The graph layer owns schema, indexes, ingestion, and parameterized Cypher. It exposes bounded operations for fund tracing, counterparty inspection, and selected flow patterns. Every response includes transaction references, timestamps, graph paths, and query duration. A missing graph result remains missing; neither the API, UI, nor LLM fills it in.
+
+The initial setup creates the FalkorDB service and schema files. Full-dataset ingestion is deliberately postponed until the user supplies the data and representative memory/runtime behavior can be measured.
+
+## API, policy, and investigation
+
+FastAPI uses Pydantic request and response models. The API coordinates scoring, policy, graph tool calls, investigation reports, and audit records. The policy layer owns action mapping; model and LLM outputs are proposals only. The first policy actions are `allow`, `review`, and simulated `block`.
+
+The investigation model is optional and is invoked only for selected cases. It receives a score plus records returned by approved graph tools. It may propose hypotheses and summarize evidence, but deterministic validation checks transaction IDs, paths, amounts, and timestamps against retrieved records before showing claims as established. Provider errors or invalid output fall back to deterministic review.
+
+Only explicit analyst confirmation promotes entities into confirmed case memory. Dismissal preserves the transaction history and audit trail. Test/evaluation records never become confirmed memory automatically.
+
+## Analyst workbench
+
+Next.js App Router, TypeScript, Tailwind CSS, and shadcn/ui provide the web application. TanStack Query manages API state, Recharts presents recorded benchmark results, and Cytoscape.js renders graph evidence. The main areas are:
+
+- **Alerts:** ranked transactions, scores, and policy outcomes.
+- **Investigations:** evidence timeline and Cytoscape rendering of query-derived paths.
+- **Benchmarks:** quality at stated alert budgets, latency, throughput, and cost.
+- **System:** service state and replay controls.
+
+The UI communicates that its data is a synthetic replay. It never creates graph facts locally; graph structure is rendered from the API's query-backed response.
+
+## Local services and reliability
+
+Docker Compose runs FalkorDB locally. The web app and API can run in their native development environments with pnpm and uv. Keep provider credentials in ignored environment files.
+
+If FalkorDB is unavailable, graph-dependent investigation reports an explicit service error rather than presenting a partial graph as complete. If the optional LLM is unavailable or returns invalid data, continue with verified graph evidence and deterministic policy. Bound depth, time windows, result counts, and query execution time to protect the service and browser.

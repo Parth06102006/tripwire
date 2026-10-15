@@ -1,49 +1,45 @@
-# Dependencies
-node_modules/
-.pnpm-store/
+# Environment and local credentials
+.env
+.env.*
+!.env.example
 
-# Virtual Environments & Python
+# JavaScript
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python
 .venv/
 venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
-# Developer scratchpad
-tasks.md
+# Dataset files and generated data
+data/raw/
+data/interim/
+data/processed/
+data/**/*.csv
+data/**/*.parquet
+data/**/*.arrow
+data/**/*.feather
 
-# Build outputs
-dist/
-build/
-.turbo/
-.next/
-out/
-*.tsbuildinfo
+# Generated models and run outputs
+artifacts/models/
+artifacts/runs/
+ml/artifacts/
 
-# Temporary and test artifacts
-*.tmp
-tmp/
-.coverage
-coverage/
-
-# Environment and secrets
-.env
-.env.local
-.env.*.local
-*.pem
-*.key
-
-# FalkorDB & Database local data
-falkordb_data/
+# Local service state
+falkordb-data/
 *.sqlite3
 *.db
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
