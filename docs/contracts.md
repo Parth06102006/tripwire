@@ -104,3 +104,15 @@ All tool queries are parameterized and bounded. An empty result is not evidence 
 Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process.
 
 Primary metrics are precision, recall, F1, average precision/PR-AUC, and recall at a named alert budget. Latency reports include P50/P95 and warm-up method. Dollar-weighted recall must state how value is counted and must not imply unique recovered funds.
+
+### HI-Small v8 offline table
+
+`data/processed/hi-small-v8/transactions.parquet` is the normalized offline transaction table. The source's two `Account` columns are mapped by position to `sender_account` and `receiver_account`. The canonical account keys are `{bank}::{account}` with both values preserved as strings. `transaction_id` is derived from the source row number and is stable only for the recorded transaction-file SHA-256.
+
+Exact duplicate source rows are retained as distinct transaction records with distinct row-derived IDs. HI-Small v8 contains 9 such rows; the profile records the count. Do not deduplicate the primary benchmark cohort silently.
+
+The table contains `transaction_id`, `timestamp`, sender/receiver bank and account fields, sender/receiver account keys, `amount_paid`, `payment_currency`, `amount_received`, `receiving_currency`, `payment_format`, `target_is_laundering`, `source_row_number`, and `split`. `target_is_laundering` is the only transaction label and is offline-only. `split` is one of `train`, `validation`, or `test` and is fixed by the adjacent `split-manifest.json`.
+
+The generated `features.parquet` contains no target column. Feature generation projects only source transaction inputs, transaction IDs, and frozen split assignments. The offline baseline evaluator joins labels from the normalized transaction table by `(transaction_id, split)`, loads train and validation labels for fitting and threshold selection, then loads test labels only after thresholds are locked. This labeled evaluation path must not be wired into the graph, API, or inference feature path.
+
+The source timestamp has minute resolution. All rows at one timestamp belong to one chronological split. A feature for transaction `t` may use only transactions strictly earlier than `t`; same-minute transactions are excluded from prior-history features. Keep each amount paired with its own currency. The patterns sidecar is not part of this feature table.

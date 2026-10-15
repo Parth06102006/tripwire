@@ -24,13 +24,13 @@ Represent each transfer as `(:Account)-[:SENT]->(:Transaction)-[:RECEIVED]->(:Ac
 
 **Status:** Accepted
 
-Keep target labels and typology ground truth in offline evaluation data. Build chronological splits where timestamps permit, freeze the test cohort, and ensure each feature uses only information available at the scored transaction time. No inference query returns labels.
+Keep target labels and typology ground truth in offline evaluation data. The feature-generation stage must not read target values; the separate offline evaluator joins labels by transaction ID and split, and reads test labels only after thresholds are locked. For HI-Small v8, use a chronological transaction split with target proportions 70%/15%/15%. The source timestamp resolution is one minute; choose the nearest cumulative-count boundaries while keeping every same-minute group in one split. Freeze the resulting test cohort in the split manifest. Historical features for transaction `t` may use only records with timestamps strictly earlier than `t`; same-minute transactions are simultaneous and cannot contribute to each other's features. No inference query returns labels.
 
 ## ADR-005: Start with three reproducible model experiments
 
 **Status:** Accepted
 
-Compare logistic regression, LightGBM with tabular and historical behavior features, and LightGBM with the same features plus graph-derived features. All share one train/validation/test protocol. Defer GNNs and graph transformers until this benchmark identifies a reason to add them.
+Compare logistic regression, LightGBM with transaction-local and past-only behavior features, and LightGBM with the same features plus graph-derived features. All share one train/validation/test protocol and frozen test cohort. Use a phase-separated offline pipeline with normalized Parquet, a versioned split manifest, model artifacts, and machine-readable metrics. Tracer's pipeline structure and fixed-recall reporting are references; its account-stratified split and full-period account aggregates are not used for TraceAML's transaction-time benchmark. Defer GNNs and graph transformers until this benchmark identifies a reason to add them.
 
 ## ADR-006: Keep scoring and action policy separate
 
@@ -56,8 +56,34 @@ Only explicit analyst confirmation promotes a suspected entity into confirmed gr
 
 Use Docker Compose for FalkorDB and native pnpm/uv development processes for the web app and API. Do not add Kafka, Redis, a vector database, or Kubernetes without measured need.
 
-## ADR-010: Use HI-Small only after the user supplies it
+## ADR-010: Pin HI-Small v8 and keep data artifacts local
 
 **Status:** Accepted
 
-Prepare for the IBM AMLworld HI-Small transaction, accounts, and pattern files, but do not fetch or commit them. Verify exact file version and schema when received. Keep raw data, processed Parquet, model artifacts, and credentials out of Git. Preserve the dataset's CDLA-Sharing-1.0 licensing and attribution separately from code licensing.
+Use IBM AMLworld HI-Small Kaggle version 8 for Iteration 1. The local workspace has `HI-Small_Trans.csv`, `HI-Small_accounts.csv`, and `HI-Small_Patterns.txt` under `data/raw/hi-small/`; keep all source files, processed Parquet, profiles, model artifacts, and credentials out of Git. Record source hashes and schema in the generated profile and split manifest. Preserve the dataset's CDLA-Sharing-1.0 licensing and attribution separately from this repository's code license.
+
+## ADR-011: Preserve currency units in evaluation
+
+**Status:** Accepted
+
+Keep `Amount Paid` paired with `Payment Currency` and `Amount Received` paired with `Receiving Currency`. Do not compare these amounts directly when currencies differ, and do not sum different currencies into one dollar-weighted recall. Report value-weighted recall by currency or defer a combined valuation until a dated, documented FX source is selected. Never describe repeated transfer amounts as unique recovered funds.
+
+## ADR-012: Learn from Tracer without vendoring its benchmark
+
+**Status:** Accepted
+
+Use Tracer's phase-separated processing, shared model artifacts, validation-selected thresholds, and fixed-recall/alert-budget comparisons as implementation references. Keep TraceAML's Next.js, FastAPI, and FalkorDB stack and its chronological transaction-level evaluation. Do not import Tracer's model scores, account-level labels, shuffled 60/20/20 split, or full-period aggregates into TraceAML. No Tracer source is vendored; if code is reused later, retain its Apache-2.0 notices and identify the upstream revision. The detailed review is in [the Tracer reference note](research/tracer-aml-reference.md).
+
+## ADR-013: Preserve exact duplicate source rows
+
+**Status:** Accepted
+
+The HI-Small v8 transaction file contains 9 exact duplicate rows across its 11 source fields. Preserve all source rows rather than guessing that a repeated record is accidental. Assign each a distinct stable ID from its source row number and recorded file hash. Record the duplicate count in the profile so later experiments can evaluate a deduplication sensitivity analysis without changing the primary cohort.
+
+## ADR-014: Keep baseline reruns deterministic and report both decision framings
+
+**Status:** Accepted
+
+Sort every joined train/validation/test split by transaction ID before encoding. Train LightGBM 4.7 in documented deterministic CPU mode with fixed seeds and thread count, native categorical features, and validation early stopping; keep logistic regression on the identical feature set and split. Record package versions, thread settings, seeds, and feature/split manifest hashes in each run config. Two clean-directory reruns must reproduce predictions and metrics exactly (tolerance: bitwise identity); record any deviation with its magnitude instead of averaging it away.
+
+Report validation-threshold results and fixed review-capacity results as distinct framings. The max-F1 validation threshold admits a variable-size alert set and answers "how does the tuned operating point perform". The predeclared 0.1% alert budget admits exactly that many top-scored test transactions and answers "what fits a fixed review capacity". Never present a budget-selected set as threshold performance or vice versa. Day-level model metrics additionally require at least 10 positives per day; thinner days report counts only.

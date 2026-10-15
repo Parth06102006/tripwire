@@ -41,9 +41,9 @@ flowchart LR
 
 ## Data and evaluation
 
-Parquet is the analytical source of truth. A profiling and preparation job validates the exact dataset version, records file hashes and schema, normalizes composite account identifiers, and writes a split manifest. Use Polars for transforms, DuckDB for local analytical queries, and PyArrow/Parquet for durable intermediate tables.
+Parquet is the analytical source of truth. The current workspace uses HI-Small Kaggle version 8. `traceaml-inspect-hi-small` writes an aggregate-only source profile; `traceaml-prepare-hi-small` validates and normalizes the transaction file and writes `data/processed/hi-small-v8/transactions.parquet` plus `split-manifest.json`. The manifest records the source hash, schema, composite account-key rule, exact split algorithm, boundaries, and label counts. Use Polars for generic CSV inspection, DuckDB for local analytical queries, and PyArrow/Parquet for durable intermediate tables.
 
-Use a chronological train/validation/test split when the supplied timestamps permit it. Feature construction for transaction `t` may use only information available at or before `t`. Keep labels and typology ground truth in the offline evaluation path. They must not be written to the inference graph or returned by inference queries.
+Use a chronological train/validation/test split when timestamps permit it. HI-Small timestamps have one-minute resolution; choose nearest cumulative-count cutoffs to 70%/85% while keeping each full timestamp group together. Feature construction for transaction `t` may use only records strictly earlier than `t`; records at the same minute are simultaneous. Keep labels and typology ground truth in the offline evaluation path. They must not be written to the inference graph or returned by inference queries.
 
 The first benchmark ladder is logistic regression, LightGBM with tabular and historical behavior features, and LightGBM with the same features plus graph-derived features. Train and tune without reading the frozen test labels, and report all models on the same held-out cohort.
 
