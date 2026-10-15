@@ -87,3 +87,15 @@ The HI-Small v8 transaction file contains 9 exact duplicate rows across its 11 s
 Sort every joined train/validation/test split by transaction ID before encoding. Train LightGBM 4.7 in documented deterministic CPU mode with fixed seeds and thread count, native categorical features, and validation early stopping; keep logistic regression on the identical feature set and split. Record package versions, thread settings, seeds, and feature/split manifest hashes in each run config. Two clean-directory reruns must reproduce predictions and metrics exactly (tolerance: bitwise identity); record any deviation with its magnitude instead of averaging it away.
 
 Report validation-threshold results and fixed review-capacity results as distinct framings. The max-F1 validation threshold admits a variable-size alert set and answers "how does the tuned operating point perform". The predeclared 0.1% alert budget admits exactly that many top-scored test transactions and answers "what fits a fixed review capacity". Never present a budget-selected set as threshold performance or vice versa. Day-level model metrics additionally require at least 10 positives per day; thinner days report counts only.
+
+## ADR-015: Compute offline graph features from Parquet; keep FalkorDB authoritative for evidence
+
+**Status:** Accepted
+
+The Iteration 1 graph feature sidecar was built by streaming every same-minute group through a compact FalkorDB feature graph. All 5,078,345 rows took 1,563 seconds, of which 1,561.8 seconds were graph round trips. The five features (recent 24-hour distinct in/out counterparties for both endpoints and a prior reverse-flow flag) are aggregate functions of the past transfer stream; they do not need a database traversal.
+
+Build them by default with `traceaml-build-graph-features-batch` (`graph/src/graph/feature_batch.py`). It reads the same four allowlisted columns, applies the same minute-group visibility rule (strictly earlier minutes only; same-minute peers invisible), the inclusive `group_epoch - window` lower bound, all-time prior reverse flow, self-transfers as ordinary pairs, and the same smoke-mode trailing-minute drop, and writes the same schema. It rejects null projected values instead of coercing them. Seeded synthetic tests check it against a brute-force evaluation of the written semantics, against the streaming builder on an in-memory fake graph, and against the real FalkorDB builder row for row (skipped when FalkorDB is unreachable).
+
+Measured on synthetic data on the local development machine (Ryzen 9 8945HS): a 5,078,345-row, 18-day input with Zipf-like degrees ran in about 12-14 seconds end to end with about 1.4 GiB peak process memory. On its first 200,000 rows the FalkorDB builder took 130.1 seconds and the batch builder 1.1 seconds, with identical output (about 114x). These are synthetic results, not HI-Small measurements.
+
+FalkorDB remains the source of truth for graph topology and structural investigation evidence (ADR-002). The FalkorDB feature builder stays available as an independent cross-check (`make graph-features-falkordb`). This decision changes only how offline model features are computed.
