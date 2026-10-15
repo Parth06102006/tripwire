@@ -51,9 +51,9 @@ The first benchmark ladder is logistic regression, LightGBM with tabular and his
 
 FalkorDB is the authoritative source for transaction topology and structural investigation evidence. The initial graph contains `Account` and `Transaction` nodes connected by `SENT` and `RECEIVED` relationships. Transaction nodes carry a stable source transaction ID, timestamp, amounts, currencies, and payment type as supported by the input schema. Account keys include institution or bank when account IDs are reused.
 
-The graph layer owns schema, indexes, ingestion, and parameterized Cypher. It exposes bounded operations for fund tracing, counterparty inspection, and selected flow patterns. Every response includes transaction references, timestamps, graph paths, and query duration. A missing graph result remains missing; neither the API, UI, nor LLM fills it in.
+The graph layer owns schema, indexes, ingestion, and parameterized Cypher. It exposes bounded operations for fund tracing, counterparty inspection, and selected flow patterns. Every response includes transaction references, timestamps, graph paths, and query duration. A missing graph result remains missing; neither the API, UI, nor LLM fills it in. The loader projects only inference-safe columns, preserves row-derived transaction IDs and duplicate source rows, and uses idempotent batched `MERGE` operations.
 
-The initial setup creates the FalkorDB service and schema files. Full-dataset ingestion is deliberately postponed until the user supplies the data and representative memory/runtime behavior can be measured.
+The local capacity probe loaded a 500,000-row chronological prefix into a separate FalkorDB graph. It reconciled all transaction and edge counts, used about 706 MiB of database memory, and completed in 31.3 seconds. A simple row-proportional estimate for all 5,078,345 transactions is about 7 GiB before host headroom; the full graph was not loaded on this 14 GiB host with about 5.6 GiB available. Use the bounded local graph scope for investigation development, and reassess full ingestion on a larger-memory host or with a more compact representation. This estimate is a capacity projection, not a measured full-load result.
 
 ## API, policy, and investigation
 

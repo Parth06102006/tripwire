@@ -99,6 +99,8 @@ Create property indexes before applying unique node constraints. FalkorDB unique
 
 All tool queries are parameterized and bounded. An empty result is not evidence that no suspicious activity exists outside the query scope.
 
+The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together. Account-anchored inspection and pattern queries center their window on the account's latest sent or received transaction. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
+
 ## Data and model evaluation contract
 
 Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process.

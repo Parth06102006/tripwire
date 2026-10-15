@@ -84,15 +84,18 @@ uv run --project ml traceaml-inspect-hi-small
 uv run --project ml traceaml-prepare-hi-small
 uv run --project ml traceaml-build-features
 uv run --project ml traceaml-train-baselines
+uv run --project ml traceaml-publish-inference-scores
 ```
 
 Preparation writes `data/processed/hi-small-v8/transactions.parquet` and `split-manifest.json`. The manifest contains the pinned source hash, canonical columns, split algorithm and boundaries, row counts, and positive counts. It places whole minute-resolution timestamps into one split and keeps `target_is_laundering` offline-only.
 
 ## Evaluation principles
 
-The local v8 run has completed logistic regression and LightGBM with tabular and past-only behavioral features. On the frozen test split (761,639 transactions; 0.205% positive prevalence), the latest LightGBM run has average precision 0.1853; at its validation-selected threshold, precision is 28.32% and recall is 23.06%. At the fixed 0.1% alert budget, recall is 17.36%. Logistic regression average precision is 0.0146 and recall at that alert budget is 0%. Full metrics and configuration are in the local, Git-ignored `artifacts/runs/hi-small-v8/baselines/` directory and can be regenerated with the commands above.
+The local v8 run has completed logistic regression and LightGBM with tabular and past-only behavioral features. Two clean baseline runs reproduced scores and model artifacts bitwise. On the frozen test split (761,639 transactions; 0.205% positive prevalence), LightGBM average precision is 0.1587; at its validation-selected threshold, precision is 23.79%, recall is 24.79%, and F1 is 0.2428. At a fixed 0.1% alert budget, it detects 248 positives (15.89% recall). Logistic regression average precision is 0.0146 and recall at that alert budget is 0%. These are synthetic-data results. Full metrics and configuration are in the local, Git-ignored `artifacts/runs/hi-small-v8/baselines/` directory and can be regenerated with the commands above.
 
-The graph-feature comparison remains pending. A rerun after separating labels from feature generation changed the LightGBM result from the earlier run; the source of the variation has not been isolated, so treat these as run-specific results pending a repeatability check. Use one chronological split and one frozen test cohort across experiments. Tune only on training and validation data. Keep labels and typology truth out of graph inference data and API responses. Test prevalence is higher than train and validation; these synthetic-data results do not establish real-world AML effectiveness.
+The graph-feature comparison remains pending. Use one chronological split and one frozen test cohort across experiments. Tune only on training and validation data. Keep labels and typology truth out of graph inference data and API responses. Test prevalence is higher than train and validation, with a higher-prevalence tail in the daily report; results do not establish real-world AML effectiveness.
+
+The replay API consumes `inference_scores.parquet`, a separate artifact containing only transaction ID, timestamp, and LightGBM risk score. The publishing command explicitly projects those columns and does not read the evaluation target.
 
 Report precision, recall, F1, average precision/PR-AUC, recall at a stated alert budget, and clearly defined dollar-weighted recall. Record split boundaries, feature availability, model configuration, hardware, concurrency, P50/P95 latency, throughput, and cost methodology. Dollar-weighted recall, latency, throughput, and cost have not yet been measured.
 
@@ -105,6 +108,17 @@ FalkorDB is the source of graph topology and investigation evidence. Transfers u
 ```
 
 Approved investigation tools are `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`. They use bounded parameterized queries and return source transaction IDs, times, values, paths, and query duration. The optional LLM can choose tools and summarize retrieved evidence; deterministic code verifies claims before display. Models and LLM output do not decide policy actions.
+
+Install the graph project and load the local capacity sample with:
+
+```sh
+uv sync --project graph
+uv run --project graph traceaml-load-graph \
+  --parquet data/processed/hi-small-v8/transactions.parquet \
+  --graph-name traceaml-capacity --limit 500000
+```
+
+The sample reconciles 500,000 transactions and each edge direction. It used about 706 MiB in FalkorDB and took 31.3 seconds on the current host. A simple projection estimates roughly 7 GiB for the full graph; the full graph has not been loaded because that would leave too little memory headroom here. See [the graph README](graph/README.md) for the loader and query bounds.
 
 See [architecture](docs/architecture.md), [API and graph contracts](docs/contracts.md), [decisions](docs/decisions.md), and [team role charters](docs/milestones/README.md).
 
