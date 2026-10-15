@@ -5,6 +5,7 @@ PARQUET ?= data/processed/hi-small-v8/transactions.parquet
 GRAPH_NAME ?= traceaml-demo
 LIMIT ?=
 API_APP ?= services/api/src/api/app.py
+API_IMAGE ?= traceaml-api
 GRAPH_FEATURES_OUT ?= data/processed/hi-small-v8/graph-features.parquet
 GRAPH_FEATURES_MANIFEST ?= data/processed/hi-small-v8/graph-features-manifest.json
 FEATURE_GRAPH ?= traceaml-features
@@ -18,9 +19,9 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env install install-web install-py \
-	up down logs dev-web dev-api \
-	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
-	graph-load graph-load-dry graph-features graph-features-falkordb graph-synth \
+	up down logs dev-web dev-api api-image 
+	data data-inspect data-prepare data-features data-train data-train-graph data-publish 
+	graph-load graph-load-dry graph-features graph-features-falkordb graph-synth 
 	test test-ml test-graph test-api lint lint-web lint-py build check
 
 help:
@@ -30,6 +31,7 @@ help:
 	@echo   logs           Follow FalkorDB logs
 	@echo   dev-web        Run the Next.js workbench dev server
 	@echo   dev-api        Run the FastAPI dev server (API_APP=$(API_APP))
+	@echo   api-image      Build the API container image (API_IMAGE=$(API_IMAGE))
 	@echo   data           Run the full ML pipeline: inspect, prepare, features, train, publish
 	@echo   graph-load     Load PARQUET into GRAPH_NAME (optional LIMIT=n)
 	@echo   graph-load-dry Validate a graph load without writing
@@ -79,6 +81,9 @@ dev-web:
 
 dev-api:
 	uv run --project services/api fastapi dev $(API_APP)
+
+api-image:
+	docker build -f services/api/Dockerfile -t $(API_IMAGE) .
 
 # ---------------------------------------------------------------------------
 # Data and model pipeline (requires data/raw/hi-small/ from the user)

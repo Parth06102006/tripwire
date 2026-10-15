@@ -247,9 +247,18 @@ def test_investigation_uses_all_three_tools(
         response = client.post("/api/investigations", json=investigation_payload())
     assert response.status_code == 200
     kinds = [kind for kind, _ in tools.calls]
-    assert kinds[0] == "trace_funds"
-    assert kinds[1] == "inspect_counterparties"
+    # Stage one (trace, counterparties) runs concurrently, then the patterns.
+    assert sorted(kinds[:2]) == ["inspect_counterparties", "trace_funds"]
     assert sorted(kinds[2:]) == ["pattern:fan_in", "pattern:fan_out", "pattern:pass_through"]
+    durations = response.json()["evidence"]["tool_durations_ms"]
+    assert [entry["tool"] for entry in durations] == [
+        "trace_funds",
+        "inspect_counterparties",
+        "detect_flow_patterns.fan_out",
+        "detect_flow_patterns.fan_in",
+        "detect_flow_patterns.pass_through",
+    ]
+    assert [entry["query_duration_ms"] for entry in durations] == [1.0, 0.5, 0.25, 0.25, 0.25]
     for kind, params in tools.calls:
         assert params["result_limit"] == 10
         assert params["time_window_seconds"] == 3600

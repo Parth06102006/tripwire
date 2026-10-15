@@ -63,6 +63,8 @@ The local capacity probe loaded a 500,000-row chronological prefix into a separa
 
 FastAPI uses strict Pydantic request and response models. Implemented routes serve a ranked alert queue and benchmark artifacts, then combine target-free replay scores with deterministic `allow`/`review` policy and FalkorDB evidence. The API rejects unknown label-like fields and the score repository fails closed if the replay artifact contains target, split, or typology columns. The current report is a deterministic evidence summary; an optional tool-calling LLM is not connected yet.
 
+The single entrypoint is `api.app:app`. Investigation tool calls run concurrently on pooled FalkorDB connections; the pattern queries overlap the fund-tracing traversal, and the response reports evidence-phase wall time plus per-tool durations (ADR-016). Domain errors map through centralized handlers to fixed-detail 404/409/503/504 responses. Analyst cases and their append-only review history persist in a local SQLite file (`TRACEAML_CASE_DB_PATH`).
+
 The investigation model is optional and is invoked only for selected cases. It receives a score plus records returned by approved graph tools. It may propose hypotheses and summarize evidence, but deterministic validation checks transaction IDs, paths, amounts, and timestamps against retrieved records before showing claims as established. Provider errors or invalid output fall back to deterministic review.
 
 Only explicit analyst confirmation promotes entities into confirmed case memory. Dismissal preserves the transaction history and audit trail. Test/evaluation records never become confirmed memory automatically.

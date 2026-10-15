@@ -1,57 +1,66 @@
-"""Case domain schemas."""
+"""Case review request and response contracts."""
 
-from pydantic import BaseModel, Field
+from __future__ import annotations
 
-from api.cases.constants import CaseStatus, ReviewAction
+from datetime import datetime
+from typing import Literal
+
+from pydantic import Field
+
+from api.schemas import StrictModel
+
+CaseStatus = Literal["suspected", "under_review", "confirmed", "dismissed"]
+ReviewAction = Literal["confirm", "dismiss"]
+HistoryAction = Literal["open", "confirm", "dismiss"]
+
+OPEN_STATUSES: tuple[CaseStatus, ...] = ("suspected", "under_review")
 
 
-class CaseReviewRequest(BaseModel):
-    """Payload for submitting an analyst review decision."""
+class CaseCreateRequest(StrictModel):
+    """Open a case for a transaction present in the score artifact."""
 
-    action: ReviewAction = Field(description="Explicit decision: confirm or dismiss")
-    reviewer_id: str = Field(min_length=1, description="Analyst identifier")
-    pattern_type: str | None = Field(default=None, description="Optional identified typology pattern")
-    notes: str | None = Field(default=None, description="Analyst investigation notes")
+    transaction_id: str = Field(min_length=1, max_length=128)
+    opened_by: str = Field(min_length=1, max_length=64, description="Analyst identifier")
+    notes: str | None = Field(default=None, max_length=4000)
 
 
-class CaseReviewItem(BaseModel):
-    """Audit record of an analyst review."""
+class CaseReviewRequest(StrictModel):
+    """Explicit analyst decision with reviewer provenance."""
+
+    action: ReviewAction
+    reviewer_id: str = Field(min_length=1, max_length=64)
+    pattern_type: str | None = Field(
+        default=None, max_length=64, description="Analyst-identified pattern, if any"
+    )
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class CaseHistoryEntry(StrictModel):
+    """One append-only audit record."""
 
     review_id: str
-    case_id: str
-    action: ReviewAction
+    action: HistoryAction
     reviewer_id: str
-    pattern_type: str | None = None
-    notes: str | None = None
-    timestamp: str
+    pattern_type: str | None
+    notes: str | None
+    timestamp: datetime
 
 
-class CaseItem(BaseModel):
-    """Case representation for workbench display."""
+class CaseItem(StrictModel):
+    """A case with its full chronological history."""
 
     case_id: str
     transaction_id: str
     status: CaseStatus
     risk_score: float
-    created_at: str
-    updated_at: str
-    reviews: list[CaseReviewItem] = Field(default_factory=list)
+    opened_by: str
+    created_at: datetime
+    updated_at: datetime
+    history: list[CaseHistoryEntry]
 
 
-class CaseReviewResponse(BaseModel):
-    """Response returned upon submitting a review."""
-
-    case_id: str
-    status: CaseStatus
-    action: ReviewAction
-    reviewer_id: str
-    timestamp: str
-    provenance_recorded: bool = True
-    message: str
-
-
-class CaseListResponse(BaseModel):
-    """Paginated cases list response."""
+class CaseListResponse(StrictModel):
+    """Paged case list, most recently updated first."""
 
     items: list[CaseItem]
     total: int
