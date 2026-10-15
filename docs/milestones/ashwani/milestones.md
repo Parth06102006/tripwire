@@ -29,3 +29,11 @@ Own FalkorDB schema, transaction graph materialization, Cypher investigation que
 ## Completion evidence
 
 Ingestion is repeatable without duplicate graph entities, and each approved tool returns bounded, source-backed results whose records can be traced to the input data.
+
+## Current implementation status
+
+- **Implemented:** first-class account/transaction graph loader, indexes, idempotent batched ingestion, and all three bounded investigation tools. The 500,000-row capacity graph reconciled transaction and edge counts.
+- **Implemented:** trace responses include source/destination keys for every returned transaction; pass-through queries bound both transfers to the request window.
+- **Verified:** a target-free 998,021-transaction demo slice loaded and supported a live validated API investigation for a held-out case.
+- **In progress:** point-in-time graph feature extraction is running on all 5,078,345 transactions. The 50,000-row smoke completed; same-cohort training and full extraction reconciliation remain pending.
+- **Review handoff:** the integration implementation touched `graph/`; review it against this ownership charter before extending graph behavior.

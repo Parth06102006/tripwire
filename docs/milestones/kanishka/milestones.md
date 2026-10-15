@@ -28,3 +28,10 @@ Own the TraceAML analyst workbench and its presentation of alerts, investigation
 ## Completion evidence
 
 The UI can display an actual investigation response and benchmark artifact, identifies unavailable services, and makes synthetic replay status clear.
+
+## Current implementation status
+
+- **Implemented:** alert queue, investigation timeline and evidence graph, benchmark view, system page, typed API client, and loading/error/empty states.
+- **Implemented:** same-origin `/api` proxy through Next.js using `TRACEAML_API_ORIGIN`, so the browser does not require CORS setup.
+- **Verification:** `pnpm lint` and `pnpm build` pass. The investigation route and API proxy returned HTTP 200 against the local services and held-out case.
+- **Pending:** visual review at desktop and mobile sizes, and analyst review of the live evidence and benchmark presentation.
