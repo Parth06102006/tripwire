@@ -43,3 +43,7 @@ falkordb-data/
 .DS_Store
 .idea/
 .vscode/
+
+# Local logs and agent worktrees
+artifacts/logs/
+.claude/worktrees/
