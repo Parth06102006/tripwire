@@ -7,12 +7,15 @@ requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.0",
     "falkordb>=1.0",
+    "numpy>=2.0",
     "pyarrow>=17.0",
 ]
 
 [project.scripts]
 traceaml-load-graph = "graph.load_graph:main"
 traceaml-build-graph-features = "graph.feature_stream:main"
+traceaml-build-graph-features-batch = "graph.feature_batch:main"
+traceaml-synth-transactions = "graph.synthetic_transactions:main"
 
 [dependency-groups]
 dev = [

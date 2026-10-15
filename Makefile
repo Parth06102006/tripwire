@@ -7,6 +7,11 @@ LIMIT ?=
 API_APP ?= services/api/src/api/app.py
 GRAPH_FEATURES_OUT ?= data/processed/hi-small-v8/graph-features.parquet
 GRAPH_FEATURES_MANIFEST ?= data/processed/hi-small-v8/graph-features-manifest.json
+FEATURE_GRAPH ?= traceaml-features
+GRAPH_FEATURES_FALKORDB_OUT ?= data/processed/hi-small-v8/graph-features-falkordb.parquet
+GRAPH_FEATURES_FALKORDB_MANIFEST ?= data/processed/hi-small-v8/graph-features-falkordb-manifest.json
+GRAPH_ABLATION_DIR ?= artifacts/runs/hi-small-v8/graph-ablation
+SYNTH_PARQUET ?= data/interim/synthetic/hi-small-shape.parquet
 
 LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 
@@ -14,8 +19,8 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 
 .PHONY: help setup env install install-web install-py \
 	up down logs dev-web dev-api \
-	data data-inspect data-prepare data-features data-train data-publish \
-	graph-load graph-load-dry graph-features \
+	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
+	graph-load graph-load-dry graph-features graph-features-falkordb graph-synth \
 	test test-ml test-graph test-api lint lint-web lint-py build check
 
 help:
@@ -28,7 +33,10 @@ help:
 	@echo   data           Run the full ML pipeline: inspect, prepare, features, train, publish
 	@echo   graph-load     Load PARQUET into GRAPH_NAME (optional LIMIT=n)
 	@echo   graph-load-dry Validate a graph load without writing
-	@echo   graph-features Build point-in-time graph features
+	@echo   data-train-graph Build graph features, then train the lgbm_graph ablation
+	@echo   graph-features Build point-in-time graph features (vectorized offline builder)
+	@echo   graph-features-falkordb Cross-check build through FalkorDB (slow; FEATURE_GRAPH)
+	@echo   graph-synth    Write a 5,078,345-row synthetic benchmark Parquet
 	@echo   test           Run ml, graph, and api tests
 	@echo   lint           Run ESLint and Ruff
 	@echo   build          Build the web app for production
@@ -90,6 +98,9 @@ data-features:
 data-train:
 	uv run --project ml traceaml-train-baselines
 
+data-train-graph: graph-features
+	uv run --project ml traceaml-train-baselines --graph-features $(GRAPH_FEATURES_OUT) --output-dir $(GRAPH_ABLATION_DIR)
+
 data-publish:
 	uv run --project ml traceaml-publish-inference-scores
 
@@ -104,7 +115,13 @@ graph-load-dry:
 	uv run --project graph traceaml-load-graph --parquet $(PARQUET) --graph-name $(GRAPH_NAME) $(LIMIT_ARG) --dry-run
 
 graph-features:
-	uv run --project graph traceaml-build-graph-features --parquet $(PARQUET) --features-out $(GRAPH_FEATURES_OUT) --manifest-out $(GRAPH_FEATURES_MANIFEST) $(LIMIT_ARG)
+	uv run --project graph traceaml-build-graph-features-batch --parquet $(PARQUET) --features-out $(GRAPH_FEATURES_OUT) --manifest-out $(GRAPH_FEATURES_MANIFEST) $(LIMIT_ARG)
+
+graph-features-falkordb:
+	uv run --project graph traceaml-build-graph-features --parquet $(PARQUET) --features-out $(GRAPH_FEATURES_FALKORDB_OUT) --manifest-out $(GRAPH_FEATURES_FALKORDB_MANIFEST) --feature-graph $(FEATURE_GRAPH) $(LIMIT_ARG)
+
+graph-synth:
+	uv run --project graph traceaml-synth-transactions --out $(SYNTH_PARQUET) --rows 5078345 --days 18
 
 # ---------------------------------------------------------------------------
 # Quality
