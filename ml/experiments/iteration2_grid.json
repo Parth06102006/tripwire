@@ -1,0 +1,599 @@
+[
+  {
+    "name": "s1_base_iter1params",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    }
+  },
+  {
+    "name": "s1_base_reg_neg010",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s1_all_reg_neg010",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s1_all_reg_neg030",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.3
+  },
+  {
+    "name": "s1_all_reg_neg100",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 1.0
+  },
+  {
+    "name": "s2_nl15",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "num_leaves": 15
+    }
+  },
+  {
+    "name": "s2_nl31",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "num_leaves": 31
+    }
+  },
+  {
+    "name": "s2_nl127",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "num_leaves": 127
+    }
+  },
+  {
+    "name": "s2_mdl50",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "min_data_in_leaf": 50
+    }
+  },
+  {
+    "name": "s2_mdl1000",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "min_data_in_leaf": 1000
+    }
+  },
+  {
+    "name": "s2_ff050",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "feature_fraction": 0.5
+    }
+  },
+  {
+    "name": "s2_l2_0",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "lambda_l2": 0.0
+    }
+  },
+  {
+    "name": "s2_l2_50",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "lambda_l2": 50.0
+    }
+  },
+  {
+    "name": "s2_lr002",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "learning_rate": 0.02
+    }
+  },
+  {
+    "name": "s2_spw5",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "scale_pos_weight": 5.0
+    }
+  },
+  {
+    "name": "s2_nl31_mdl1000_ff050",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "params": {
+      "num_leaves": 31,
+      "min_data_in_leaf": 1000,
+      "feature_fraction": 0.5
+    }
+  },
+  {
+    "name": "s2_seed1",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 1,
+    "sample_seed": 1
+  },
+  {
+    "name": "s2_seed2",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 2,
+    "sample_seed": 2
+  },
+  {
+    "name": "s2_seed3",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 3,
+    "sample_seed": 3
+  },
+  {
+    "name": "s3_drop_txlocal",
+    "families": [
+      "base",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_txlocal",
+    "families": [
+      "base",
+      "txlocal"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_drop_velocity",
+    "families": [
+      "base",
+      "txlocal",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_velocity",
+    "families": [
+      "base",
+      "velocity"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_drop_amount",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_amount",
+    "families": [
+      "base",
+      "amount"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_drop_counterparty",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_counterparty",
+    "families": [
+      "base",
+      "counterparty"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_drop_cycle",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_cycle",
+    "families": [
+      "base",
+      "cycle"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_drop_kyc",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_base_plus_kyc",
+    "families": [
+      "base",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1
+  },
+  {
+    "name": "s3_all_no_recency",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle",
+      "kyc"
+    ],
+    "neg_sample_rate": 0.1,
+    "drop_columns": [
+      "s_mins_since_last_out",
+      "s_mins_since_last_in",
+      "r_mins_since_last_out",
+      "r_mins_since_last_in",
+      "s_age_mins",
+      "r_age_mins",
+      "pair_mins_since_last",
+      "reverse_mins_since_last"
+    ]
+  },
+  {
+    "name": "s3_iter1params_seed1",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 1
+  },
+  {
+    "name": "s3_iter1params_gfeat_seed1",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 1
+  },
+  {
+    "name": "s3_iter1params_seed2",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 2
+  },
+  {
+    "name": "s3_iter1params_gfeat_seed2",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 2
+  },
+  {
+    "name": "s3_iter1params_seed3",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 3
+  },
+  {
+    "name": "s3_iter1params_gfeat_seed3",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0
+    },
+    "seed": 3
+  },
+  {
+    "name": "s3_iter1params_anystop",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0,
+      "metric": [
+        "binary_logloss",
+        "average_precision"
+      ]
+    },
+    "first_metric_only": false
+  },
+  {
+    "name": "s3_iter1params_gfeat_anystop",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 1.0,
+    "params": {
+      "num_leaves": 127,
+      "min_data_in_leaf": 100,
+      "feature_fraction": 0.8,
+      "lambda_l2": 0.0,
+      "metric": [
+        "binary_logloss",
+        "average_precision"
+      ]
+    },
+    "first_metric_only": false
+  },
+  {
+    "name": "s3_reg_gfeat_seed42",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 42,
+    "sample_seed": 42
+  },
+  {
+    "name": "s3_reg_gfeat_seed1",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 1,
+    "sample_seed": 1
+  },
+  {
+    "name": "s3_reg_gfeat_seed2",
+    "families": [
+      "base",
+      "gfeat"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 2,
+    "sample_seed": 2
+  },
+  {
+    "name": "s3_reg_base_seed1",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 1,
+    "sample_seed": 1
+  },
+  {
+    "name": "s3_reg_base_seed2",
+    "families": [
+      "base"
+    ],
+    "neg_sample_rate": 0.1,
+    "seed": 2,
+    "sample_seed": 2
+  }
+]
