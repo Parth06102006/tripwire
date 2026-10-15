@@ -19,6 +19,7 @@ traceaml-prepare-hi-small = "ml.prepare_data:main"
 traceaml-build-features = "ml.features:main"
 traceaml-train-baselines = "ml.baselines:main"
 traceaml-daily-report = "ml.daily_report:main"
+traceaml-publish-inference-scores = "ml.inference_scores:main"
 
 [dependency-groups]
 dev = [

@@ -57,7 +57,7 @@ The local capacity probe loaded a 500,000-row chronological prefix into a separa
 
 ## API, policy, and investigation
 
-FastAPI uses Pydantic request and response models. The API coordinates scoring, policy, graph tool calls, investigation reports, and audit records. The policy layer owns action mapping; model and LLM outputs are proposals only. The first policy actions are `allow`, `review`, and simulated `block`.
+FastAPI uses strict Pydantic request and response models. Implemented routes serve a ranked alert queue and benchmark artifacts, then combine target-free replay scores with deterministic `allow`/`review` policy and FalkorDB evidence. The API rejects unknown label-like fields and the score repository fails closed if the replay artifact contains target, split, or typology columns. The current report is a deterministic evidence summary; an optional tool-calling LLM is not connected yet.
 
 The investigation model is optional and is invoked only for selected cases. It receives a score plus records returned by approved graph tools. It may propose hypotheses and summarize evidence, but deterministic validation checks transaction IDs, paths, amounts, and timestamps against retrieved records before showing claims as established. Provider errors or invalid output fall back to deterministic review.
 

@@ -8,6 +8,8 @@ The web app, uv-managed API and ML projects, and local FalkorDB service are set 
 
 FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-row chronological prefix in `traceaml-capacity` reconciles 500,000 transactions and each edge direction; FalkorDB used about 706 MiB and loading took 31.3 seconds. A separate 1,000-row smoke graph was reloaded idempotently and exercised through all three tools. The full graph was not loaded: a simple linear estimate is about 7 GiB, exceeding available memory with safe headroom on this host. Artifacts and graph data remain local.
 
+The FastAPI service now serves the target-free replay alert queue, offline benchmark metrics, and bounded graph investigations. It uses a deterministic threshold policy and evidence verifier. The score artifact contains 761,639 held-out transactions and only transaction ID, timestamp, and score. Endpoint tests cover label exclusion, ranked alerts, validation, and evidence grounding; live API investigation awaits a graph containing the held-out replay cohort.
+
 ## Shared delivery gates
 
 ### Repository foundation
@@ -30,6 +32,7 @@ FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-
 - [x] Implement and live-smoke-test bounded `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`.
 - [ ] Load and benchmark the complete 5,078,345-transaction graph on hardware with sufficient memory.
 - [ ] Serve validated scoring and investigation contracts through FastAPI.
+- [x] Serve a ranked target-free replay queue, benchmark artifacts, deterministic decisions, and verified graph-investigation responses.
 - [ ] Preserve deterministic policy and human-confirmed case-memory provenance.
 
 ### Analyst workbench and evidence

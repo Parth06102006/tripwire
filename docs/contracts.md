@@ -10,7 +10,7 @@ This file records shared API and graph contracts. Pydantic models and executable
 - Target labels and typology truth never appear in inference responses.
 - Errors use standard HTTP status codes and a JSON `detail` value. Graph-dependent operations return `503` when FalkorDB is unavailable.
 
-## Initial endpoints
+## Implemented endpoints
 
 ### `GET /api/health`
 
@@ -25,6 +25,14 @@ Returns service readiness and dependency status.
 ```
 
 Allowed status values for dependencies are `available`, `unavailable`, and `not_configured`. Health output contains no credentials or dataset labels.
+
+### `GET /api/alerts`
+
+Accepts `limit` from 1-200 and a non-negative `offset`. Returns `total`, `limit`, `offset`, and items containing `transaction_id`, `timestamp`, `score`, and deterministic `decision` (`allow` or `review`). Items sort by score descending, then transaction ID ascending. Decisions use the validation-selected LightGBM threshold. The API reads only the target-free `inference_scores.parquet` artifact.
+
+### `GET /api/benchmarks`
+
+Returns the `logreg` and `lgbm` sections from the offline `baseline_metrics.json` artifact under a `models` key. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
 
 ### `POST /api/investigations`
 
@@ -47,18 +55,27 @@ Response shape:
 {
   "investigation_id": "inv_...",
   "transaction_id": "source-transaction-id",
+  "risk_score": 0.0,
+  "decision": "review",
+  "policy_version": "v1",
   "evidence": {
     "transactions": [],
     "accounts": [],
     "paths": [],
     "query_duration_ms": 0.0
   },
-  "report": null,
+  "report": {
+    "hypothesis": "...",
+    "supporting_transaction_ids": [],
+    "counterevidence_ids": [],
+    "recommendation": "review",
+    "validation": "validated"
+  },
   "created_at": "2026-10-15T00:00:00Z"
 }
 ```
 
-Evidence arrays contain only records returned by executed queries. A report is absent until the optional investigator runs and its claims pass validation.
+The score is loaded from the target-free replay artifact. Deterministic policy compares it with the validation-selected threshold. The current report is a deterministic summary; it does not call an LLM. Evidence arrays contain only records returned by executed queries. The API calls `trace_funds`, `inspect_counterparties`, and bounded `detect_flow_patterns` variants. Query duration covers all calls. Unknown scored IDs return 404, unavailable graph or score artifacts return 503, and invalid request bounds return 422.
 
 ### Investigation record fields
 
@@ -83,7 +100,7 @@ The inference graph excludes laundering labels and typology ground truth. Case m
 
 Create property indexes before applying unique node constraints. FalkorDB unique constraints are created through the supported client constraint API after those indexes exist; do not use unsupported Neo4j-only constraint syntax in Cypher files.
 
-## Case review contract
+## Planned case review contract (not implemented)
 
 `GET /api/cases` returns cases with status `suspected`, `under_review`, `confirmed`, or `dismissed`, using bounded pagination.
 
