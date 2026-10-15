@@ -122,4 +122,6 @@ The sample reconciles 500,000 transactions and each edge direction. It used abou
 
 See [architecture](docs/architecture.md), [API and graph contracts](docs/contracts.md), [decisions](docs/decisions.md), and [team role charters](docs/milestones/README.md).
 
+For the full planning context, implementation summary, benchmark interpretation, and remaining work, see [the project history and Iteration 1 summary](docs/project-history-and-iteration-1-summary.md).
+
 Implementation reference: [Tracer AML Graph Intelligence](docs/research/tracer-aml-reference.md). Its public results use a different account-level split and are not TraceAML benchmark results.
