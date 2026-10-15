@@ -10,7 +10,7 @@ FalkorDB ingestion and the three bounded query tools are implemented. A 500,000-
 
 The FastAPI service now serves the target-free replay alert queue, offline benchmark metrics, and bounded graph investigations. It uses a deterministic threshold policy and evidence verifier. The score artifact contains 761,639 held-out transactions and only transaction ID, timestamp, and score. Endpoint tests cover label exclusion, ranked alerts, validation, evidence grounding, and optional graph-ablation metrics. A target-free two-day demo slice around the highest-scored held-out case contains 998,021 transactions and 354,660 accounts; a live API request for that case returned 25 evidence transactions and 75 verified paths with no target field. This slice supports a working demonstration but is not a full-cohort graph. The alert, investigation, and benchmark views are wired to API responses, and Next.js proxies same-origin `/api` requests to the configured API origin.
 
-The point-in-time graph feature builder and optional `lgbm_graph` training arm are implemented. A 50,000-row prefix smoke processed four complete minutes, wrote 43,547 feature rows, and completed in 2.16 seconds with nonzero values in all five features. A full extraction attempt exposed slow two-hop expansion, so that candidate was removed before the full run; the current full feature build is in progress. The feature graph is indexed by account key and remains separate from the transaction-evidence graph.
+The point-in-time graph feature builder processed all 5,078,345 transactions into five target-free features in 1,563 seconds. The same-cohort comparison did not improve detection: graph LightGBM average precision was 0.1521 versus 0.1587, and 0.1% alert-budget recall was 14.73% versus 15.89%. On the two-day investigation graph, 12 serial API runs measured 3.49 seconds P50 / 3.58 seconds P95. The fan-out, fan-in, and pass-through queries dominate this time. Raw LightGBM scored the held-out cohort at 152,214 transactions per second with one thread. Full measurements and limits are in [the performance report](../benchmarks/iteration-1-performance.md). Cost per decision and concurrent capacity remain unmeasured.
 
 ## Shared delivery gates
 
@@ -26,7 +26,7 @@ The point-in-time graph feature builder and optional `lgbm_graph` training arm a
 - [x] Verify HI-Small version 8, license, schema, and source hashes in the local profile and split manifest.
 - [x] Resolve account IDs using bank plus account strings; preserve leading zeroes and the duplicate source account columns by position.
 - [x] Generate past-only behavioral features and validate row/split/hash reconciliation over the frozen chronological split.
-- [ ] Complete the full point-in-time feature extraction and compare LightGBM with and without graph features on the frozen test cohort. (The graph feature pipeline and ablation runner are implemented; full extraction and comparison are in progress.)
+- [x] Complete the full point-in-time feature extraction and compare LightGBM with and without graph features on the frozen test cohort.
 
 ### Graph and API
 
@@ -48,7 +48,7 @@ The point-in-time graph feature builder and optional `lgbm_graph` training arm a
 ### Release evidence
 
 - [ ] Document clean setup and data placement without committing data or credentials.
-- [ ] Record metric definitions, split, feature set, hardware, concurrency, latency, throughput, and cost methodology.
+- [x] Record metric definitions, split, feature set, hardware, serial workload protocol, latency, throughput, and costs that remain unpriced.
 - [ ] Provide graph schema and queries, reproducible benchmark instructions, and demo materials.
 
 ## Ownership

@@ -62,8 +62,9 @@ Own the data protocol, leakage controls, model evaluation, and review of every f
 - **Caveat:** test prevalence (0.205%) is higher than training (0.080%) and validation (0.100%), indicating temporal distribution shift. These measurements describe this synthetic dataset and protocol only.
 - **Graph checkpoint:** bounded FalkorDB ingestion and investigation queries are implemented and live-smoke-tested. The local 500,000-row chronological prefix takes about 706 MiB in the graph container and loads in 31.3 seconds. The full graph is not loaded on this host; a simple extrapolation is roughly 7 GiB before headroom.
 - **Integration overlap:** the shared implementation checkpoint also added code under Ashwani's `graph/`, Parth's `services/api/`, and Kanishka's `apps/web/` ownership paths. Primary ownership remains unchanged; each member should review and take over extensions within their charter.
-- **In progress:** the separate FalkorDB point-in-time feature builder and optional `lgbm_graph` trainer are implemented. Graph and ML suites pass (46 graph tests; 17 ML tests). A 50,000-row prefix smoke processed four complete minutes and wrote 43,547 target-free feature rows in 2.16 seconds. Two-hop expansion was removed after a full-run timing probe showed it scaled poorly. The full feature sidecar and same-cohort comparison are running/pending.
-- **Not yet measured:** model/service P50/P95 latency, throughput, dollar-weighted recall, and cost methodology.
+- **Complete:** the separate FalkorDB point-in-time feature builder wrote all 5,078,345 rows and the optional `lgbm_graph` trainer evaluated the frozen test cohort. The graph arm reached 0.1521 average precision versus 0.1587 for LightGBM alone. At a 0.1% alert budget it detected 230 positives (14.73% recall) versus 248 (15.89%). This graph feature set did not improve detection quality.
+- **Complete:** raw LightGBM single-row inference, full-cohort scoring throughput, alert and benchmark endpoint latency, direct graph query latency, and end-to-end investigation latency were measured. The workload, hardware, warmups, repeats, costs, and limitations are in [the performance report](../../benchmarks/iteration-1-performance.md).
+- **Not measured or priced:** dollar-weighted recall, concurrent service capacity, electricity or infrastructure cost, and cost per 1,000 decisions. No LLM provider was called; the current report generator is deterministic.
 
 ## Acceptance evidence
 
@@ -71,6 +72,6 @@ Iteration 1 evaluation work is complete when:
 
 1. A clean setup can regenerate the source profile, normalized Parquet, and split manifest from the pinned input files.
 2. Automated checks prove split boundaries do not overlap and same-timestamp rows stay together; no future or target-derived data enters features.
-3. Logistic regression, LightGBM, and LightGBM plus point-in-time graph features share one frozen test cohort and save reproducible configuration and result artifacts; the full graph-feature run and ablation remain pending.
+3. Logistic regression, LightGBM, and LightGBM plus point-in-time graph features share one frozen test cohort and save configuration and result artifacts. The graph ablation is complete and recorded in the benchmark report.
 4. Thresholds are selected on validation only, alert-budget definitions are fixed, and currency-weighted metrics follow the documented valuation rule.
 5. Every benchmark claim in the workbench and public materials traces to a saved run artifact and clearly labels the data as synthetic.

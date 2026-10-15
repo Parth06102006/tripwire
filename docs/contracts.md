@@ -120,7 +120,7 @@ The current query implementation caps traversal at 1-3 hops, time windows at 30 
 
 ## Data and model evaluation contract
 
-Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process.
+Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process. The initial model, graph, and API measurements are in [the Iteration 1 performance report](benchmarks/iteration-1-performance.md). Serial loopback throughput must not be presented as concurrent capacity.
 
 Primary metrics are precision, recall, F1, average precision/PR-AUC, and recall at a named alert budget. Latency reports include P50/P95 and warm-up method. Dollar-weighted recall must state how value is counted and must not imply unique recovered funds.
 
