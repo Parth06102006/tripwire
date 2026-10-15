@@ -29,14 +29,15 @@ ANCHOR_ROW = [
 
 
 def trace_row(anchor="hi8-tx-00000001", depth=1):
-    """Build one 24-column UNION branch row for the trace parser."""
+    """Build one 30-column UNION branch row for the trace parser."""
     hops: list[object] = []
     for hop in range(1, 4):
         if hop <= depth:
             hops += [f"hi8-tx-0000000{hop + 1}", "2022-09-01 00:02",
-                     50.0, "Euro", 49.0, "Euro"]
+                     50.0, "Euro", 49.0, "Euro",
+                     "BANKB::00002001", "BANKC::00003001"]
         else:
-            hops += [None] * 6
+            hops += [None] * 8
     keys = ["BANKB::00002001", "BANKC::00003001"] + [None] * 2
     return [anchor, depth] + hops + keys
 
@@ -171,13 +172,22 @@ def test_trace_query_has_unique_return_aliases() -> None:
         "anchor_id", "depth",
         *(f"{name}_{hop}" for hop in (1, 2, 3) for name in (
             "transaction_id", "timestamp", "amount_paid", "payment_currency",
-            "amount_received", "receiving_currency",
+            "amount_received", "receiving_currency", "sender_account_key",
+            "receiver_account_key",
         )),
         *(f"account_key_{hop}" for hop in range(4)),
     ]
     for branch in query.split("\nUNION\n"):
         for alias in aliases:
             assert branch.count(f"AS {alias}") == 1, alias
+
+
+def test_pass_through_bounds_both_transfer_times_to_the_requested_window() -> None:
+    assert "t1.timestamp_epoch >= $min_epoch AND t1.timestamp_epoch <= $max_epoch" in (
+        queries.TRACE_PASS_THROUGH
+    )
+    assert "t2.timestamp_epoch >= t1.timestamp_epoch" in queries.TRACE_PASS_THROUGH
+    assert "t2.timestamp_epoch <= $max_epoch" in queries.TRACE_PASS_THROUGH
 
 
 def test_all_statements_avoid_labels_and_enforce_limits() -> None:
@@ -213,6 +223,8 @@ def test_trace_funds_shapes_paths_and_duration() -> None:
     assert path["transaction_ids"] == ["hi8-tx-00000002"]
     assert path["account_keys"] == ["BANKB::00002001", "BANKC::00003001"]
     assert result["transactions"][0]["receiving_currency"] == "Euro"
+    assert result["transactions"][0]["source_account_key"] == "BANKB::00002001"
+    assert result["transactions"][0]["destination_account_key"] == "BANKC::00003001"
     assert {a["account_key"] for a in result["accounts"]} == {
         "BANKB::00002001", "BANKC::00003001",
     }

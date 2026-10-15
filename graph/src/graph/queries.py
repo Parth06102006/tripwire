@@ -125,12 +125,15 @@ _HOP_COLUMNS = """\
 t{hop}.transaction_id AS transaction_id_{hop}, t{hop}.timestamp AS timestamp_{hop}, \
 t{hop}.amount_paid AS amount_paid_{hop}, t{hop}.payment_currency AS payment_currency_{hop}, \
 t{hop}.amount_received AS amount_received_{hop}, \
-t{hop}.receiving_currency AS receiving_currency_{hop}"""
+t{hop}.receiving_currency AS receiving_currency_{hop}, \
+t{hop}.sender_account_key AS sender_account_key_{hop}, \
+t{hop}.receiver_account_key AS receiver_account_key_{hop}"""
 
 _NULL_HOP_COLUMNS = """\
 NULL AS transaction_id_{hop}, NULL AS timestamp_{hop}, NULL AS amount_paid_{hop}, \
 NULL AS payment_currency_{hop}, NULL AS amount_received_{hop}, \
-NULL AS receiving_currency_{hop}"""
+NULL AS receiving_currency_{hop}, NULL AS sender_account_key_{hop}, \
+NULL AS receiver_account_key_{hop}"""
 
 
 def _trace_branch(direction: str, depth: int) -> str:
@@ -283,7 +286,8 @@ LIMIT $result_limit
 TRACE_PASS_THROUGH = """\
 MATCH (a1:Account)-[:SENT]->(t1:Transaction)-[:RECEIVED]->(b:Account {account_key: $account_key})
 MATCH (b)-[:SENT]->(t2:Transaction)-[:RECEIVED]->(a2:Account)
-WHERE t1.timestamp_epoch >= $min_epoch AND t2.timestamp_epoch <= $max_epoch
+WHERE t1.timestamp_epoch >= $min_epoch AND t1.timestamp_epoch <= $max_epoch
+  AND t2.timestamp_epoch <= $max_epoch
   AND t2.timestamp_epoch >= t1.timestamp_epoch
   AND t2.timestamp_epoch <= t1.timestamp_epoch + $dwell_seconds
 RETURN a1.account_key AS entry_key, b.account_key AS middle_key, a2.account_key AS exit_key,
@@ -420,7 +424,8 @@ def trace_funds(
         ["anchor_id", "depth"]
         + [f"{name}_{hop}" for hop in (1, 2, 3) for name in (
             "transaction_id", "timestamp", "amount_paid", "payment_currency",
-            "amount_received", "receiving_currency",
+            "amount_received", "receiving_currency", "sender_account_key",
+            "receiver_account_key",
         )]
         + ["account_key_0", "account_key_1", "account_key_2", "account_key_3"]
     )
@@ -443,6 +448,8 @@ def trace_funds(
                 "payment_currency": row[f"payment_currency_{hop}"],
                 "amount_received": row[f"amount_received_{hop}"],
                 "receiving_currency": row[f"receiving_currency_{hop}"],
+                "source_account_key": row[f"sender_account_key_{hop}"],
+                "destination_account_key": row[f"receiver_account_key_{hop}"],
             }
             transactions.setdefault(tid, record)
             hop_records.append(record)
