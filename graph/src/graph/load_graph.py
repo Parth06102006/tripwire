@@ -31,7 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import resource
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -369,7 +369,49 @@ def reconcile_counts(
 
 def peak_rss_mb() -> float:
     """Return current peak resident set size in MiB (aggregate-only metric)."""
+    if sys.platform == "win32":
+        return _windows_peak_working_set_bytes() / (1024.0 * 1024.0)
+
+    import resource
+
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+
+
+def _windows_peak_working_set_bytes() -> int:
+    """Return the peak working set of this process on Windows, in bytes."""
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessMemoryCounters(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
+        ]
+
+    counters = ProcessMemoryCounters()
+    counters.cb = ctypes.sizeof(ProcessMemoryCounters)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    psapi.GetProcessMemoryInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessMemoryCounters),
+        wintypes.DWORD,
+    ]
+    psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+    if not psapi.GetProcessMemoryInfo(
+        kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return int(counters.PeakWorkingSetSize)
 
 
 def connect(host: str, port: int, graph_name: str) -> Any:

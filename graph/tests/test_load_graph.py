@@ -178,6 +178,8 @@ def test_duplicate_source_rows_become_distinct_transactions() -> None:
 
 
 def test_timestamp_epoch_is_utc_independent_of_host_timezone(monkeypatch) -> None:
+    if not hasattr(time, "tzset"):
+        pytest.skip("time.tzset is unavailable on this platform")
     previous_tz = os.environ.get("TZ")
     monkeypatch.setenv("TZ", "Pacific/Kiritimati")
     time.tzset()
