@@ -128,3 +128,11 @@ Decisions:
 - `TransactionNotFound` and `AccountNotFound` subclass `ValueError` and keep the iteration-1 messages.
 
 Equivalence: `graph/tests/test_equivalence_live.py` builds a seeded synthetic graph and checks every tool against complete reference result sets from the frozen iteration-1 statements (`graph/src/graph/legacy_queries.py`). Records must be identical, counts must equal `min(limit, reference size)`, and the leading sort-key sequence must match. Legacy window ends are corrected for the comparison. It also checks that merge mode, create mode and the self-contained `BATCH_CYPHER` build identical graphs. Measured results are in `docs/benchmarks/iteration-2-graph-performance.md`.
+
+## ADR-018: Iteration 2 detection model and test-look discipline
+
+**Status:** Proposed (pending lead review)
+
+Adopt the Iteration 2 all-family LightGBM (`s1_all_reg_neg100`) as the detection model for the held-out replay. It uses 76 strictly past-only features in seven families, built by `ml.feature_families`, with regularized LightGBM. It was selected on validation (AP 0.6088) and evaluated once on the frozen test cohort (AP 0.7525; Sept 9-10 bulk AP 0.5996), against Iteration 1's 0.1587. Results and audits are in [the Iteration 2 detection report](benchmarks/iteration-2-detection.md).
+
+Test candidates are pre-declared in `ml/experiments/iteration2_candidates.json` and committed before any test look. Every test evaluation, including re-analysis of frozen scores, is appended to the run's `test_ledger.jsonl` and reported. Report Sept 9-10 bulk metrics next to full-cohort metrics, because the Sept 11-18 tail is near-separable and dominates full-cohort budget recall. Report per-currency amount-weighted recall as defined in ADR-011, never summed across currencies. Treat the static account registry (`kyc` family) as serving-time metadata and keep the no-registry variant (test AP 0.7326) as the robustness reference.

@@ -20,6 +20,7 @@ traceaml-build-features = "ml.features:main"
 traceaml-train-baselines = "ml.baselines:main"
 traceaml-daily-report = "ml.daily_report:main"
 traceaml-publish-inference-scores = "ml.inference_scores:main"
+traceaml-experiment = "ml.experiment:main"
 
 [dependency-groups]
 dev = [

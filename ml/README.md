@@ -119,6 +119,20 @@ uv run --project ml traceaml-daily-report
 
 Outputs `daily_report.json` in the run directory.
 
+## Iteration 2 experiment runner
+
+`traceaml-experiment` builds the seven point-in-time feature families in
+`ml.feature_families` (base, txlocal, velocity, amount, counterparty, cycle,
+kyc; 76 features in about 3 minutes). It also runs validation-only grids from
+`experiments/iteration2_grid.json` and evaluates pre-declared candidates
+(`experiments/iteration2_candidates.json`) on the frozen test cohort,
+appending every test look to `test_ledger.jsonl`. Real-data leakage audits
+(`truncation-check`, `perturbation-check`) and target-free score publication
+(`publish`) are also included. Subcommands: `features`, `validate`, `test`,
+`rescore`, `truncation-check`, `perturbation-check`, `publish`. Pass absolute
+or `../`-relative input and output paths. Method, every run, and results:
+`docs/benchmarks/iteration-2-detection.md`.
+
 ## Leakage and semantics tests
 
 Fast tests pin the user-approved seams: target absent from feature
