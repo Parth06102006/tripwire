@@ -348,3 +348,15 @@ def test_merge_mode_builds_same_graph_as_create_mode(live: Any, tmp_path: Path) 
         assert load_graph.reconcile_counts(other, rows_attempted=len(rows), timeout_ms=30_000)
     finally:
         other.delete()
+    # The self-contained BATCH_CYPHER (used by small direct loaders such as
+    # the API integration test) must build the same graph.
+    single = db.select_graph(f"agentgraph-equiv-batch-{uuid.uuid4().hex[:8]}")
+    try:
+        load_graph.ensure_schema(single)
+        for start in range(0, len(rows), 900):
+            single.query(load_graph.BATCH_CYPHER, params={"rows": rows[start:start + 900]},
+                         timeout=30_000)
+        assert _q(single, statement, {}) == _q(graph, statement, {})
+        assert _q(single, tx, {}) == _q(graph, tx, {})
+    finally:
+        single.delete()

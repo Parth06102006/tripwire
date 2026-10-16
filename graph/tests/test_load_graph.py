@@ -119,6 +119,7 @@ def test_projection_excludes_offline_columns() -> None:
         assert column not in load_graph.TRANSACTION_PROPERTIES
         assert column not in load_graph.ACCOUNT_PROPERTIES
     for text in (
+        load_graph.BATCH_CYPHER,
         load_graph.ACCOUNT_UPSERT_CYPHER,
         load_graph.ACCOUNT_CREATE_CYPHER,
         load_graph.TRANSACTION_MERGE_CYPHER,

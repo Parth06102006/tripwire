@@ -159,8 +159,29 @@ CREATE (s)-[:SENT]->(t:Transaction {
 })-[:RECEIVED]->(d)
 """
 
-#: Backwards-compatible name for the idempotent transaction statement.
-BATCH_CYPHER = TRANSACTION_MERGE_CYPHER
+#: Self-contained idempotent statement over ``row_to_params`` rows (accounts
+#: and transactions in one query). Kept for callers that load small graphs
+#: directly, such as the API integration test; the CLI uses the faster
+#: two-statement :func:`load_batch` path. Maintains ``Account.last_epoch``.
+BATCH_CYPHER = f"""UNWIND $rows AS r
+MERGE (s:Account {{account_key: r.sender_key}})
+ON CREATE SET s.bank = r.sender_bank, s.account_id = r.sender_account,
+  s.last_epoch = r.timestamp_epoch
+ON MATCH SET s.last_epoch = CASE
+  WHEN s.last_epoch IS NULL OR r.timestamp_epoch > s.last_epoch THEN r.timestamp_epoch
+  ELSE s.last_epoch END
+MERGE (d:Account {{account_key: r.receiver_key}})
+ON CREATE SET d.bank = r.receiver_bank, d.account_id = r.receiver_account,
+  d.last_epoch = r.timestamp_epoch
+ON MATCH SET d.last_epoch = CASE
+  WHEN d.last_epoch IS NULL OR r.timestamp_epoch > d.last_epoch THEN r.timestamp_epoch
+  ELSE d.last_epoch END
+MERGE (t:Transaction {{transaction_id: r.transaction_id}})
+ON CREATE SET
+{_TRANSACTION_SET}
+MERGE (s)-[:SENT]->(t)
+MERGE (t)-[:RECEIVED]->(d)
+"""
 
 COUNT_TRANSACTIONS_CYPHER = "MATCH (t:Transaction) RETURN count(t) AS n"
 COUNT_SENT_CYPHER = "MATCH ()-[r:SENT]->() RETURN count(r) AS n"
