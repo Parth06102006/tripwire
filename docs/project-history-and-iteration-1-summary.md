@@ -161,6 +161,31 @@ Iteration 1 has an integrated replay and investigation path with baseline result
 
 The next model or infrastructure work should follow evidence. The current graph feature ablation did not improve detection, while pattern queries dominate investigation latency. A sensible next step is to inspect and optimize bounded pattern-query plans and cache/feature availability before expanding the model ladder. Any GNN, graph transformer, constrained decision model, or fine-tuning experiment should be a separately named protocol on the same frozen cohort, with a reason tied to a measured gap.
 
+## Iteration 2 summary (latency and benchmark)
+
+Iteration 2 focused on latency, scale, and benchmark quality; visual work was deferred. All results are on synthetic AMLworld HI-Small v8 data on a local Intel Core i5-13400F host. The Iteration 1 report names a different CPU, so Iteration 1 figures are quoted as published and same-machine reruns are given where available.
+
+| Area | Iteration 1 | Iteration 2 | Report |
+| --- | ---: | ---: | --- |
+| `POST /api/investigations`, serial P50 | 3,487 ms | 11.0 ms (P95 13.7 ms) | [performance](benchmarks/iteration-2-performance.md) |
+| Investigation throughput | 0.286 req/s serial | 87.5 req/s serial; 244 req/s at 16 clients, 4 workers, 0 errors | [performance](benchmarks/iteration-2-performance.md) |
+| Flow-pattern queries, P50 | 891-1,728 ms | 1.0-1.3 ms | [graph](benchmarks/iteration-2-graph-performance.md) |
+| Full 5,078,345-transaction graph | not loaded (7 GiB projected) | loaded in 520.9 s, 2,514 MB graph memory, 23.2 ms case investigation | [graph](benchmarks/iteration-2-graph-performance.md) |
+| Graph feature sidecar build | 1,563 s | 14.3 s, row-for-row identical | ADR-015 |
+| Test average precision | 0.1587 | 0.7525 (Sept 9-10 bulk 0.5996 vs 0.0877) | [detection](benchmarks/iteration-2-detection.md) |
+| Recall at 0.1% alert budget | 15.89% | 47.73% | [detection](benchmarks/iteration-2-detection.md) |
+| Cost per investigation | unpriced | about $1.3e-7 metered CPU (estimate) | [performance](benchmarks/iteration-2-performance.md) |
+
+Root causes and changes:
+
+- **Investigation latency:** account queries started from a whole-window `timestamp_epoch` range scan instead of the indexed account; pass-through built a full in-by-out cross product. Queries now anchor on indexed keys, and the API runs tools concurrently on pooled connections (ADR-016, ADR-017).
+- **Correctness:** `UNION ... ORDER BY ... LIMIT` bound only the last branch, so pattern windows ended at an arbitrary epoch and trace limits applied to one branch only. Iteration 1 fan-out evidence for the benchmark case was affected (2 vs 7 counterparties).
+- **API:** a parallel rewrite merged in PR #1 (hardcoded alerts, mismatched graph properties, invalid `pyproject.toml`) was replaced by the restored single entrypoint `api.app:app`; its case module was kept and rebuilt with append-only provenance.
+- **Detection:** Iteration 1 settings overfit (train AP up to 0.99), so the earlier graph-feature ablation result was single-run variance. Regularized LightGBM with 76 strictly past-only features in seven families reaches the figures above. Candidates were pre-declared before test evaluation and every test look is ledgered (ADR-018). Truncation and perturbation audits on real data found no leakage. The Sept 11-18 tail is near-separable and inflates full-cohort budget recall; the Sept 9-10 bulk figures are the conservative comparison.
+- **Infrastructure:** the Compose volume now mounts FalkorDB's real data path, so graphs survive container recreation; the FalkorDB browser moved to host port 3001.
+
+Open items: demo materials, the optional LLM report drafter, graph-side case links, hub-account latency (up to 207 ms P95 at full scale), a clean-host re-measurement of the model workload, and switching the API replay to the Iteration 2 score artifact.
+
 ## Key documents
 
 - [Product requirements and ownership](prd.md)

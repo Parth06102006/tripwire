@@ -32,6 +32,7 @@ data/**/*.feather
 # Generated models and run outputs
 artifacts/models/
 artifacts/runs/
+artifacts/benchmarks/
 ml/artifacts/
 
 # Local service state
@@ -43,3 +44,7 @@ falkordb-data/
 .DS_Store
 .idea/
 .vscode/
+
+# Local logs and agent worktrees
+artifacts/logs/
+.claude/worktrees/

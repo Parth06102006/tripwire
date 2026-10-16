@@ -23,6 +23,8 @@ compose.yaml    Local FalkorDB service
 
 ## Local setup
 
+A root `Makefile` wraps the commands below (GNU Make; on Windows install it with `winget install ezwinports.make`). Run `make help` for the targets. Typical flow: `make setup`, `make up`, `make data`, `make graph-load LIMIT=500000`, then `make dev-api` and `make dev-web`. `make check` runs lint, tests, and the web build.
+
 Install the frontend dependencies and start the web app:
 
 ```bash

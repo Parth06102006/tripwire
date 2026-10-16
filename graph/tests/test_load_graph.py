@@ -10,7 +10,7 @@ import calendar
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -37,19 +37,24 @@ class FakeGraph:
 
     def query(self, cypher: str, params: dict[str, object] | None = None, timeout: int | None = None):
         self.calls.append((cypher, params, timeout))
+        if params is not None and "accounts" in params:
+            for acc in params["accounts"]:
+                assert isinstance(acc, dict)
+                entry = self.accounts.setdefault(
+                    acc["key"], {"bank": acc["bank"], "account_id": acc["account"],
+                                 "last_epoch": acc["last_epoch"]},
+                )
+                # ON MATCH: last_epoch only increases.
+                entry["last_epoch"] = max(entry["last_epoch"], acc["last_epoch"])
+            return FakeResult([])
         if params is not None and "rows" in params:
             rows = params["rows"]
             assert isinstance(rows, list)
             for row in rows:
                 assert isinstance(row, dict)
-                self.accounts.setdefault(
-                    row["sender_key"],
-                    {"bank": row["sender_bank"], "account_id": row["sender_account"]},
-                )
-                self.accounts.setdefault(
-                    row["receiver_key"],
-                    {"bank": row["receiver_bank"], "account_id": row["receiver_account"]},
-                )
+                # MATCH semantics: accounts must already exist.
+                assert row["sender_key"] in self.accounts
+                assert row["receiver_key"] in self.accounts
                 # MERGE + ON CREATE SET: first write wins, re-runs change nothing.
                 self.transactions.setdefault(row["transaction_id"], dict(row))
                 self.sent.add((row["sender_key"], row["transaction_id"]))
@@ -110,7 +115,17 @@ def test_projection_excludes_offline_columns() -> None:
     for column in ("target_is_laundering", "split"):
         assert column not in load_graph.LOAD_COLUMNS
         assert column not in load_graph.TRANSACTION_PROPERTIES
-    for text in (load_graph.BATCH_CYPHER, " ".join(load_graph.LOAD_COLUMNS)):
+    for column in ("target_is_laundering", "split", "source_row_number"):
+        assert column not in load_graph.TRANSACTION_PROPERTIES
+        assert column not in load_graph.ACCOUNT_PROPERTIES
+    for text in (
+        load_graph.BATCH_CYPHER,
+        load_graph.ACCOUNT_UPSERT_CYPHER,
+        load_graph.ACCOUNT_CREATE_CYPHER,
+        load_graph.TRANSACTION_MERGE_CYPHER,
+        load_graph.TRANSACTION_CREATE_CYPHER,
+        " ".join(load_graph.LOAD_COLUMNS),
+    ):
         lowered = text.lower()
         assert "target_is_laundering" not in lowered
         assert "is laundering" not in lowered
@@ -171,13 +186,15 @@ def test_duplicate_source_rows_become_distinct_transactions() -> None:
     ):
         twin[field] = base[field]
     batch = [load_graph.row_to_params(base), load_graph.row_to_params(twin)]
-    graph.query(load_graph.BATCH_CYPHER, params={"rows": batch}, timeout=1000)
+    load_graph.load_batch(graph, batch, mode="merge", timeout_ms=1000)
     assert len(graph.transactions) == 2
     assert len(graph.accounts) == 2
     assert len(graph.sent) == 2 and len(graph.received) == 2
 
 
 def test_timestamp_epoch_is_utc_independent_of_host_timezone(monkeypatch) -> None:
+    if not hasattr(time, "tzset"):
+        pytest.skip("time.tzset is unavailable on this platform")
     previous_tz = os.environ.get("TZ")
     monkeypatch.setenv("TZ", "Pacific/Kiritimati")
     time.tzset()
@@ -200,7 +217,7 @@ def test_double_load_is_idempotent() -> None:
     graph = FakeGraph()
     batch = [load_graph.row_to_params(synthetic_record(n)) for n in (1, 2, 3)]
     for _ in range(2):
-        graph.query(load_graph.BATCH_CYPHER, params={"rows": batch}, timeout=1000)
+        load_graph.load_batch(graph, batch, mode="merge", timeout_ms=1000)
     assert len(graph.transactions) == 3
     assert len(graph.sent) == 3 and len(graph.received) == 3
     counts = load_graph.reconcile_counts(graph, rows_attempted=3, timeout_ms=1000)
@@ -210,9 +227,9 @@ def test_double_load_is_idempotent() -> None:
 def test_on_create_semantics_keep_first_write() -> None:
     graph = FakeGraph()
     original = load_graph.row_to_params(synthetic_record(1))
-    graph.query(load_graph.BATCH_CYPHER, params={"rows": [original]}, timeout=1000)
+    load_graph.load_batch(graph, [original], mode="merge", timeout_ms=1000)
     altered = dict(original, amount_paid=999999.0)
-    graph.query(load_graph.BATCH_CYPHER, params={"rows": [altered]}, timeout=1000)
+    load_graph.load_batch(graph, [altered], mode="merge", timeout_ms=1000)
     assert graph.transactions[original["transaction_id"]]["amount_paid"] == original["amount_paid"]
 
 
@@ -220,7 +237,7 @@ def test_schema_creates_indexes_before_constraints() -> None:
     graph = FakeGraph()
     status = load_graph.ensure_schema(graph)
     kinds = [entry.split(":")[0] for entry in graph.schema_log]
-    assert kinds == ["index"] * 4 + ["unique"] * 2
+    assert kinds == ["index"] * 2 + ["unique"] * 2
     assert set(status) == set(graph.schema_log)
 
 
@@ -237,7 +254,7 @@ def test_schema_reports_already_indexed_as_existing() -> None:
 def test_reconcile_counts_fails_on_mismatch() -> None:
     graph = FakeGraph()
     batch = [load_graph.row_to_params(synthetic_record(1))]
-    graph.query(load_graph.BATCH_CYPHER, params={"rows": batch}, timeout=1000)
+    load_graph.load_batch(graph, batch, mode="merge", timeout_ms=1000)
     with pytest.raises(ValueError, match="reconciliation failed"):
         load_graph.reconcile_counts(graph, rows_attempted=2, timeout_ms=1000)
 
@@ -282,3 +299,84 @@ def test_main_loads_and_reconciles_via_fake(tmp_path, monkeypatch, capsys) -> No
     second = json.loads(capsys.readouterr().out)
     assert second["reconciliation"]["transactions"] == 3
     assert len(graph.transactions) == 3
+
+
+def test_stored_properties_match_allowlists() -> None:
+    import re
+
+    created = set(re.findall(r"^\s+(\w+): r\.", load_graph.TRANSACTION_CREATE_CYPHER, re.MULTILINE))
+    merged = set(re.findall(r"t\.(\w+) = r\.", load_graph.TRANSACTION_MERGE_CYPHER))
+    assert created == set(load_graph.TRANSACTION_PROPERTIES)
+    assert merged | {"transaction_id"} == set(load_graph.TRANSACTION_PROPERTIES)
+    account_props = set(re.findall(r"(\w+): acc\.", load_graph.ACCOUNT_CREATE_CYPHER))
+    assert account_props == set(load_graph.ACCOUNT_PROPERTIES)
+
+
+def test_split_batch_dedupes_accounts_with_max_epoch() -> None:
+    first = load_graph.row_to_params(synthetic_record(1))
+    later = load_graph.row_to_params(
+        synthetic_record(30, sender_account="00001001", sender_account_key="BANKA::00001001")
+    )
+    accounts, rows = load_graph.split_batch([first, later])
+    by_key = {a["key"]: a for a in accounts}
+    assert len(rows) == 2
+    assert len(by_key) == 3
+    assert by_key[first["sender_key"]]["last_epoch"] == max(
+        first["timestamp_epoch"], later["timestamp_epoch"]
+    )
+    assert "source_row_number" not in rows[0]
+
+
+def test_last_epoch_only_increases_across_batches() -> None:
+    graph = FakeGraph()
+    late = load_graph.row_to_params(synthetic_record(30))
+    early = dict(load_graph.row_to_params(synthetic_record(1)),
+                 sender_key=late["sender_key"], sender_bank=late["sender_bank"],
+                 sender_account=late["sender_account"])
+    load_graph.load_batch(graph, [late], mode="merge", timeout_ms=1000)
+    load_graph.load_batch(graph, [early], mode="merge", timeout_ms=1000)
+    assert graph.accounts[late["sender_key"]]["last_epoch"] == late["timestamp_epoch"]
+
+
+def test_aggregate_accounts_matches_rowwise_max(tmp_path) -> None:
+    parquet = tmp_path / "tiny.parquet"
+    records = [synthetic_record(n) for n in range(1, 6)]
+    records[4]["sender_bank"] = records[0]["sender_bank"]
+    records[4]["sender_account"] = records[0]["sender_account"]
+    records[4]["sender_account_key"] = records[0]["sender_account_key"]
+    write_parquet(parquet, records)
+    accounts = load_graph.aggregate_accounts(parquet, limit=None, window=None)
+    expected: dict[str, int] = {}
+    for record in records:
+        params = load_graph.row_to_params(record)
+        for key in (params["sender_key"], params["receiver_key"]):
+            expected[key] = max(expected.get(key, 0), params["timestamp_epoch"])
+    assert {a["key"]: a["last_epoch"] for a in accounts} == expected
+    limited = load_graph.aggregate_accounts(parquet, limit=2, window=None)
+    assert len(limited) == 4
+
+
+def test_window_keeps_inclusive_range_around_anchor(tmp_path) -> None:
+    parquet = tmp_path / "tiny.parquet"
+    write_parquet(parquet, [synthetic_record(n) for n in range(1, 11)])
+    center = load_graph.find_anchor_timestamp(parquet, "hi8-tx-00000005")
+    window = (center - timedelta(seconds=120), center + timedelta(seconds=120))
+    batches = list(load_graph.iter_param_batches(parquet, batch_size=4, limit=None, window=window))
+    ids = [row["transaction_id"] for batch in batches for row in batch]
+    assert ids == [f"hi8-tx-{n:08d}" for n in range(3, 8)]
+    with pytest.raises(ValueError, match="not found"):
+        load_graph.find_anchor_timestamp(parquet, "hi8-tx-99999999")
+
+
+def test_create_mode_loads_and_refuses_non_empty_graph(tmp_path, monkeypatch, capsys) -> None:
+    parquet = tmp_path / "tiny.parquet"
+    write_parquet(parquet, [synthetic_record(n) for n in range(1, 4)])
+    graph = FakeGraph()
+    monkeypatch.setattr(load_graph, "connect", lambda *args: graph)
+    argv = ["--parquet", str(parquet), "--mode", "create"]
+    assert load_graph.main(argv) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["reconciliation"]["transactions"] == 3
+    assert summary["account_phase"]["accounts"] == 6
+    assert load_graph.main(argv) == 1
+    assert "requires an empty graph" in json.loads(capsys.readouterr().out)["error"]

@@ -62,7 +62,14 @@ Response shape:
     "transactions": [],
     "accounts": [],
     "paths": [],
-    "query_duration_ms": 0.0
+    "query_duration_ms": 0.0,
+    "tool_durations_ms": [
+      { "tool": "trace_funds", "query_duration_ms": 0.0 },
+      { "tool": "inspect_counterparties", "query_duration_ms": 0.0 },
+      { "tool": "detect_flow_patterns.fan_out", "query_duration_ms": 0.0 },
+      { "tool": "detect_flow_patterns.fan_in", "query_duration_ms": 0.0 },
+      { "tool": "detect_flow_patterns.pass_through", "query_duration_ms": 0.0 }
+    ]
   },
   "report": {
     "hypothesis": "...",
@@ -75,7 +82,11 @@ Response shape:
 }
 ```
 
-The score is loaded from the target-free replay artifact. Deterministic policy compares it with the validation-selected threshold. The current report is a deterministic summary; it does not call an LLM. Evidence arrays contain only records returned by executed queries. The API calls `trace_funds`, `inspect_counterparties`, and bounded `detect_flow_patterns` variants. Query duration covers all calls. Unknown scored IDs return 404, unavailable graph or score artifacts return 503, and invalid request bounds return 422.
+The score is loaded from the target-free replay artifact. Deterministic policy compares it with the validation-selected threshold. The current report is a deterministic summary; it does not call an LLM. Evidence arrays contain only records returned by executed queries. The API calls `trace_funds`, `inspect_counterparties`, and bounded `detect_flow_patterns` variants concurrently over pooled FalkorDB connections: the first two start together, and the three pattern variants start as soon as either has returned the anchor transfer's account keys. Evidence is merged in a fixed order, so results match serial execution.
+
+Duration semantics (changed in Iteration 2): `query_duration_ms` is the wall-clock time of the whole graph evidence phase, which is what the analyst waits for. Before Iteration 2 it was the sum of the serial tool durations. `tool_durations_ms` lists each executed tool's own measured duration in the fixed order above; pattern entries are absent when the anchor transfer was not returned. Under concurrency the per-tool sum can exceed the wall time.
+
+Errors: a transaction absent from the score artifact returns 404 `transaction not scored`; a scored transaction absent from the graph returns 404 `transaction not found in graph`; an unconfigured or unreachable graph returns 503 `graph unavailable`; a missing score or threshold artifact returns 503; a query exceeding its timeout returns 504 `graph query timed out`; malformed graph evidence returns 500 `graph evidence unavailable`, and a report citing unreturned records returns 500 `evidence validation failed`; invalid request bounds return 422. Error bodies carry only these fixed `detail` strings, never hosts, ports, paths, or exception text. Each graph query uses the server-side timeout `TRACEAML_GRAPH_QUERY_TIMEOUT_MS` (default 5000).
 
 ### Investigation record fields
 
@@ -100,11 +111,19 @@ The inference graph excludes laundering labels and typology ground truth. Case m
 
 Create property indexes before applying unique node constraints. FalkorDB unique constraints are created through the supported client constraint API after those indexes exist; do not use unsupported Neo4j-only constraint syntax in Cypher files.
 
-## Planned case review contract (not implemented)
+## Case review contract
 
-`GET /api/cases` returns cases with status `suspected`, `under_review`, `confirmed`, or `dismissed`, using bounded pagination.
+Cases persist in SQLite at `TRACEAML_CASE_DB_PATH` (default `data/cases/cases.db`, relative to the repository root; ignored by Git). The review history is append-only: database triggers reject updates and deletes of history rows and deletes of cases.
 
-`POST /api/cases/{case_id}/review` accepts an explicit `confirm` or `dismiss` action, reviewer ID, optional pattern type, and analyst notes. A confirmation may write provenance-backed case/ring links. A dismissal preserves the transaction history and audit record and does not erase graph data.
+`GET /api/cases?status=&limit=50&offset=0` returns `items`, `total`, `limit` (1-100), and `offset`, most recently updated first. `status` filters by `suspected`, `under_review`, `confirmed`, or `dismissed`.
+
+`POST /api/cases` with `{"transaction_id": "...", "opened_by": "analyst-id", "notes": null}` opens a `suspected` case and returns it with status 201. The transaction must exist in the target-free score artifact (404 `transaction not scored` otherwise); its risk score is copied from the artifact. A transaction may have at most one `suspected`, `under_review`, or `confirmed` case (409 otherwise); a dismissed case does not block a new one. There is no seed data.
+
+`GET /api/cases/{case_id}` returns one case (404 `case not found`).
+
+`POST /api/cases/{case_id}/review` accepts `{"action": "confirm" | "dismiss", "reviewer_id": "...", "pattern_type": null, "notes": null}`. Only explicit analyst action changes status: `confirm` moves the case to `confirmed`, and `dismiss` moves it to `dismissed`. Both are terminal; reviewing a confirmed or dismissed case returns 409 and never overwrites history. A dismissal preserves the transaction history and audit record and does not erase graph data. Nothing is written to the graph yet; provenance-backed case or ring links in the graph remain future work.
+
+Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `opened_by`, `created_at`, `updated_at`, and `history`. Each history entry has `review_id`, `action` (`open`, `confirm`, or `dismiss`), `reviewer_id`, `pattern_type`, `notes`, and `timestamp`, oldest first. `under_review` is accepted as a filter value but no current transition produces it.
 
 ## Approved graph tools
 
@@ -116,11 +135,11 @@ Create property indexes before applying unique node constraints. FalkorDB unique
 
 All tool queries are parameterized and bounded. An empty result is not evidence that no suspicious activity exists outside the query scope.
 
-The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together. Account-anchored inspection and pattern queries center their window on the account's latest sent or received transaction. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
+The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together, and applies the row limit to each (direction, depth) branch, so it returns at most `result_limit` paths per branch. The window of account-anchored inspection and pattern queries ends at the account's latest sent or received transaction (`Account.last_epoch`; the iteration-1 statement returned an arbitrary epoch, ADR-017). Unknown anchors raise `graph.queries.TransactionNotFound` or `AccountNotFound`. Both are `ValueError` subclasses and keep the messages `unknown transaction_id: ...` and `unknown account_key or no account activity: ...`. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
 
 ## Data and model evaluation contract
 
-Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process. The initial model, graph, and API measurements are in [the Iteration 1 performance report](benchmarks/iteration-1-performance.md). Serial loopback throughput must not be presented as concurrent capacity.
+Every benchmark run records dataset version and input hashes, split boundaries, feature set, model version, threshold, alert budget, test cohort, hardware, concurrency, and metric definitions. All candidate models use the same frozen test cohort. Test labels are accessible only to the offline evaluation process. The initial model, graph, and API measurements are in [the Iteration 1 performance report](benchmarks/iteration-1-performance.md). The current suite (`make bench`, `bench/`) and its results are in [the Iteration 2 performance report](benchmarks/iteration-2-performance.md); the API serves `docs/benchmarks/iteration-2-performance.json` by default. The `PerformanceSummary` schema keeps every Iteration 1 field and adds optional `p99_ms`, model `batches` and `full_test_cohort_all_threads`, `concurrency.sweeps`, and numeric cost estimates. Serial loopback throughput must not be presented as concurrent capacity, and capacity levels flagged as contaminated by background load must not be quoted as clean capacity.
 
 Primary metrics are precision, recall, F1, average precision/PR-AUC, and recall at a named alert budget. Latency reports include P50/P95 and warm-up method. Dollar-weighted recall must state how value is counted and must not imply unique recovered funds.
 
@@ -138,6 +157,6 @@ The source timestamp has minute resolution. All rows at one timestamp belong to 
 
 ### Point-in-time graph feature sidecar
 
-`traceaml-build-graph-features` writes a target-free Parquet sidecar keyed by `transaction_id`. Its exact columns are the transaction ID plus `gfeat_sender_out_24h`, `gfeat_sender_in_24h`, `gfeat_receiver_out_24h`, `gfeat_receiver_in_24h`, and `gfeat_prior_reverse_flow`. The graph builder reads only `transaction_id`, `timestamp`, `sender_account_key`, and `receiver_account_key`; it never reads target, split, or pattern columns. DuckDB sorts those fields by `(timestamp, transaction_id)`, and the builder queries FalkorDB state before applying each complete minute. Recent counterparties use the inclusive 24-hour lower bound and strict earlier-minute upper bound. Reverse flow means a prior directed edge from receiver to sender. The builder uses a separate `FAccount`/`FLOW` graph with an account-key range index and records source hash, row reconciliation, feature definitions, ordering, and timings in a manifest.
+`traceaml-build-graph-features-batch` (default, vectorized from Parquet) and `traceaml-build-graph-features` (FalkorDB cross-check) write the same target-free Parquet sidecar keyed by `transaction_id`, with row-for-row identical values. Its exact columns are the transaction ID plus `gfeat_sender_out_24h`, `gfeat_sender_in_24h`, `gfeat_receiver_out_24h`, `gfeat_receiver_in_24h`, and `gfeat_prior_reverse_flow`. Both builders read only `transaction_id`, `timestamp`, `sender_account_key`, and `receiver_account_key`; they never read target, split, or pattern columns. DuckDB sorts those fields by `(timestamp, transaction_id)`, and the FalkorDB builder queries graph state before applying each complete minute. Recent counterparties use the inclusive 24-hour lower bound and strict earlier-minute upper bound. Reverse flow means a prior directed edge from receiver to sender. The FalkorDB builder uses a separate `FAccount`/`FLOW` graph with an account-key range index; the batch builder computes the same rules with columnar interval counting and rejects null projected values. Both record source hash, row reconciliation, feature definitions, ordering, and timings in a manifest.
 
 The baseline trainer accepts this sidecar only through `--graph-features`. It requires the exact target-free schema, unique non-null IDs, integer features, and a binary reverse-flow flag. The offline evaluator joins by transaction ID and fails if any split loses rows; labels and split assignments continue to come only from the offline evaluation tables. The `lgbm_graph` arm shares the baseline's frozen split, threshold-selection rules, categorical encoding, and alert budget.

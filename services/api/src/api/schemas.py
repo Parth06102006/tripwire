@@ -91,6 +91,7 @@ class LatencyStats(StrictModel):
     p50_ms: float
     p95_ms: float
     mean_ms: float
+    p99_ms: float | None = None
 
 
 class SerialLatencyStats(LatencyStats):
@@ -109,6 +110,8 @@ class CohortInferenceStats(StrictModel):
 class ModelPerformance(StrictModel):
     single_prepared_row: LatencyStats
     full_test_cohort: CohortInferenceStats
+    full_test_cohort_all_threads: CohortInferenceStats | None = None
+    batches: dict[str, LatencyStats] | None = None
 
 
 class InvestigationPerformance(SerialLatencyStats):
@@ -133,11 +136,47 @@ class GraphQueryPerformance(StrictModel):
 
 
 class CostStatus(StrictModel):
+    """Cost status; numeric estimates are optional and always labelled estimates."""
+
     external_llm_calls: int
     external_llm_cost: str
     local_compute_cost: str
     cost_per_1000_decisions: str
     dollar_weighted_recall: str
+    price_basis: str | None = None
+    scoring_usd_per_1000_transactions: float | None = None
+    scoring_cpu_seconds_per_1000_transactions: float | None = None
+    investigation_usd: float | None = None
+    investigation_cpu_seconds: float | None = None
+    investigation_provisioned_usd: float | None = None
+
+
+class CapacityLevel(StrictModel):
+    """One closed-loop concurrency level of a capacity sweep."""
+
+    concurrency: int
+    requests: int
+    throughput_rps: float
+    p50_ms: float
+    p95_ms: float
+    p99_ms: float
+    error_rate: float
+
+
+class CapacitySweep(StrictModel):
+    endpoint: str
+    workers: int
+    duration_seconds: float
+    levels: list[CapacityLevel]
+    knee_concurrency: int | None
+    peak_throughput_rps: float
+    first_error_concurrency: int | None
+
+
+class ConcurrencyPerformance(StrictModel):
+    falkordb_thread_count: int | None = None
+    falkordb_max_queued_queries: int | None = None
+    sweeps: dict[str, CapacitySweep]
 
 
 class PerformanceSummary(StrictModel):
@@ -150,6 +189,9 @@ class PerformanceSummary(StrictModel):
     api: dict[str, SerialLatencyStats | InvestigationPerformance]
     graph_queries: GraphQueryPerformance
     cost: CostStatus
+    run_id: str | None = None
+    git_commit: str | None = None
+    concurrency: ConcurrencyPerformance | None = None
 
 
 class BenchmarksResponse(StrictModel):
@@ -198,13 +240,35 @@ class GraphPath(StrictModel):
     transaction_ids: list[str]
 
 
+ToolName = Literal[
+    "trace_funds",
+    "inspect_counterparties",
+    "detect_flow_patterns.fan_out",
+    "detect_flow_patterns.fan_in",
+    "detect_flow_patterns.pass_through",
+]
+
+
+class ToolDuration(StrictModel):
+    """Duration one approved graph tool measured around its own queries."""
+
+    tool: ToolName
+    query_duration_ms: float
+
+
 class InvestigationEvidence(StrictModel):
-    """Evidence arrays containing only records returned by executed queries."""
+    """Evidence arrays containing only records returned by executed queries.
+
+    ``query_duration_ms`` is the wall time of the whole graph evidence phase;
+    tools run concurrently. ``tool_durations_ms`` lists each tool's own
+    measured duration, so their sum can exceed the wall time.
+    """
 
     transactions: list[TransactionEvidence]
     accounts: list[AccountEvidence]
     paths: list[GraphPath]
     query_duration_ms: float
+    tool_durations_ms: list[ToolDuration] = Field(default_factory=list)
 
 
 class InvestigationReport(StrictModel):

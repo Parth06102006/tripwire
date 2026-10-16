@@ -119,6 +119,20 @@ uv run --project ml traceaml-daily-report
 
 Outputs `daily_report.json` in the run directory.
 
+## Iteration 2 experiment runner
+
+`traceaml-experiment` builds the seven point-in-time feature families in
+`ml.feature_families` (base, txlocal, velocity, amount, counterparty, cycle,
+kyc; 76 features in about 3 minutes). It also runs validation-only grids from
+`experiments/iteration2_grid.json` and evaluates pre-declared candidates
+(`experiments/iteration2_candidates.json`) on the frozen test cohort,
+appending every test look to `test_ledger.jsonl`. Real-data leakage audits
+(`truncation-check`, `perturbation-check`) and target-free score publication
+(`publish`) are also included. Subcommands: `features`, `validate`, `test`,
+`rescore`, `truncation-check`, `perturbation-check`, `publish`. Pass absolute
+or `../`-relative input and output paths. Method, every run, and results:
+`docs/benchmarks/iteration-2-detection.md`.
+
 ## Leakage and semantics tests
 
 Fast tests pin the user-approved seams: target absent from feature
@@ -150,3 +164,12 @@ model results, latency, and cost are not included.
 
 All output paths are ignored by Git. Command output contains aggregates
 only, never transaction rows.
+
+## Graph-feature ablation
+
+`make data-train-graph` builds the point-in-time graph sidecar with the
+vectorized offline builder (`traceaml-build-graph-features-batch`, ADR-015).
+It then trains the `lgbm_graph` arm with
+`traceaml-train-baselines --graph-features data/processed/hi-small-v8/graph-features.parquet`.
+The FalkorDB builder (`make graph-features-falkordb`) produces identical
+values and remains available as a cross-check.

@@ -20,6 +20,7 @@ from api.scores import (
     ScoreRepository,
     load_scores,
 )
+from api.settings import REPOSITORY_ROOT, Settings
 
 THRESHOLD = 0.5
 
@@ -178,6 +179,9 @@ def test_benchmarks_reads_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         encoding="utf-8",
     )
     monkeypatch.setenv("TRACEAML_BASELINE_METRICS_PATH", str(metrics))
+    monkeypatch.setenv(
+        "TRACEAML_PERFORMANCE_PATH", str(REPOSITORY_ROOT / "docs/benchmarks/iteration-1-performance.json")
+    )
     with make_client() as client:
         response = client.get("/api/benchmarks")
     assert response.status_code == 200
@@ -247,9 +251,18 @@ def test_investigation_uses_all_three_tools(
         response = client.post("/api/investigations", json=investigation_payload())
     assert response.status_code == 200
     kinds = [kind for kind, _ in tools.calls]
-    assert kinds[0] == "trace_funds"
-    assert kinds[1] == "inspect_counterparties"
+    # Stage one (trace, counterparties) runs concurrently, then the patterns.
+    assert sorted(kinds[:2]) == ["inspect_counterparties", "trace_funds"]
     assert sorted(kinds[2:]) == ["pattern:fan_in", "pattern:fan_out", "pattern:pass_through"]
+    durations = response.json()["evidence"]["tool_durations_ms"]
+    assert [entry["tool"] for entry in durations] == [
+        "trace_funds",
+        "inspect_counterparties",
+        "detect_flow_patterns.fan_out",
+        "detect_flow_patterns.fan_in",
+        "detect_flow_patterns.pass_through",
+    ]
+    assert [entry["query_duration_ms"] for entry in durations] == [1.0, 0.5, 0.25, 0.25, 0.25]
     for kind, params in tools.calls:
         assert params["result_limit"] == 10
         assert params["time_window_seconds"] == 3600
@@ -469,3 +482,20 @@ def test_schemas_reject_label_keys() -> None:
             result_limit=5,
             is_illicit=1,  # type: ignore[call-arg]
         )
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    ["iteration-1-performance.json", "iteration-2-performance.json"],
+)
+def test_versioned_performance_snapshots_match_contract(snapshot: str) -> None:
+    """Every committed snapshot validates against the served schema."""
+    path = REPOSITORY_ROOT / "docs" / "benchmarks" / snapshot
+    summary = schemas.PerformanceSummary.model_validate_json(path.read_text(encoding="utf-8"))
+    assert summary.cost.external_llm_calls == 0
+    assert "Synthetic" in summary.dataset_label
+
+
+def test_default_performance_snapshot_exists() -> None:
+    """The default TRACEAML_PERFORMANCE_PATH points at a committed snapshot."""
+    assert (REPOSITORY_ROOT / Settings.model_fields["performance_path"].default).is_file()

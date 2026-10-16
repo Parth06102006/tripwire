@@ -87,3 +87,66 @@ The HI-Small v8 transaction file contains 9 exact duplicate rows across its 11 s
 Sort every joined train/validation/test split by transaction ID before encoding. Train LightGBM 4.7 in documented deterministic CPU mode with fixed seeds and thread count, native categorical features, and validation early stopping; keep logistic regression on the identical feature set and split. Record package versions, thread settings, seeds, and feature/split manifest hashes in each run config. Two clean-directory reruns must reproduce predictions and metrics exactly (tolerance: bitwise identity); record any deviation with its magnitude instead of averaging it away.
 
 Report validation-threshold results and fixed review-capacity results as distinct framings. The max-F1 validation threshold admits a variable-size alert set and answers "how does the tuned operating point perform". The predeclared 0.1% alert budget admits exactly that many top-scored test transactions and answers "what fits a fixed review capacity". Never present a budget-selected set as threshold performance or vice versa. Day-level model metrics additionally require at least 10 positives per day; thinner days report counts only.
+
+## ADR-015: Compute offline graph features from Parquet; keep FalkorDB authoritative for evidence
+
+**Status:** Accepted
+
+The Iteration 1 graph feature sidecar was built by streaming every same-minute group through a compact FalkorDB feature graph. All 5,078,345 rows took 1,563 seconds, of which 1,561.8 seconds were graph round trips. The five features (recent 24-hour distinct in/out counterparties for both endpoints and a prior reverse-flow flag) are aggregate functions of the past transfer stream; they do not need a database traversal.
+
+Build them by default with `traceaml-build-graph-features-batch` (`graph/src/graph/feature_batch.py`). It reads the same four allowlisted columns, applies the same minute-group visibility rule (strictly earlier minutes only; same-minute peers invisible), the inclusive `group_epoch - window` lower bound, all-time prior reverse flow, self-transfers as ordinary pairs, and the same smoke-mode trailing-minute drop, and writes the same schema. It rejects null projected values instead of coercing them. Seeded synthetic tests check it against a brute-force evaluation of the written semantics, against the streaming builder on an in-memory fake graph, and against the real FalkorDB builder row for row (skipped when FalkorDB is unreachable).
+
+Measured on synthetic data on the local development machine (Ryzen 9 8945HS): a 5,078,345-row, 18-day input with Zipf-like degrees ran in about 12-14 seconds end to end with about 1.4 GiB peak process memory. On its first 200,000 rows the FalkorDB builder took 130.1 seconds and the batch builder 1.1 seconds, with identical output (about 114x). These are synthetic results, not HI-Small measurements.
+
+FalkorDB remains the source of truth for graph topology and structural investigation evidence (ADR-002). The FalkorDB feature builder stays available as an independent cross-check (`make graph-features-falkordb`). This decision changes only how offline model features are computed.
+
+## ADR-016: One API entrypoint with concurrent, pooled graph tools
+
+**Status:** Accepted
+
+The API has a single application, `api.app:app`, used by `make dev-api`, the service README, and the container image. A parallel rewrite (`api.main`) that served hardcoded alerts, seeded fake cases, and queried graph properties absent from the loader schema was removed; its case-review module was kept and rebuilt on the score artifact, without seed data.
+
+Investigation tools run concurrently on a bounded thread pool. Each worker thread holds its own falkordb-py graph handle (the handle caches schema state) over one shared, bounded Redis connection pool per process, so requests reuse sockets instead of connecting per request. Pattern queries start as soon as either stage-one tool returns the anchor transfer's account keys. Every query keeps its server-side timeout, and the evidence phase has an overall deadline derived from it. Evidence merges in a fixed order, so concurrency does not change results. `query_duration_ms` now reports evidence-phase wall time, with per-tool durations in `tool_durations_ms`. Iteration 1 measurements summed serial tool time and are not directly comparable.
+
+Case history is append-only in SQLite (`TRACEAML_CASE_DB_PATH`), enforced by triggers. Graph-side case links are deferred.
+
+## ADR-017: Anchor graph queries on indexed keys; maintain Account.last_epoch; fresh-load create path
+
+**Status:** Accepted
+
+Iteration 1 flow-pattern tools took about 0.9-1.7 seconds even with zero matches. `GRAPH.PROFILE` showed the cause: with a `Transaction.timestamp_epoch` range index present, the planner started account-anchored statements from a timestamp range scan (528,982 rows for a one-day window on a 1M-transaction graph) and traversed back to the account, instead of starting from the `Account.account_key` index. The same profile exposed a correctness bug: `TRACE_ACCOUNT_LATEST_EPOCH` used `UNION ... ORDER BY epoch DESC LIMIT 1`, and in Cypher the trailing `ORDER BY`/`LIMIT` binds only to the last `UNION` branch, so the window end was an arbitrary epoch from the first branch. On the 500-account equivalence fixture the legacy statement was wrong for 497 accounts. On the iteration-1 case (`hi8-tx-03863669`) the sender's window ended 31.7 hours before its latest activity. Legacy fan-out found 2 distinct counterparties and no match; the corrected window finds 7 counterparties and 7 matches. Iteration-1 pattern results and their latency depended on that arbitrary window. The same `UNION`/`LIMIT` binding meant `trace_funds` limited only its last branch.
+
+Decisions:
+
+- Account- and transaction-anchored statements bind the indexed anchor first (`MATCH ... WITH a MATCH (a)-[:SENT]->(t)`), so expansion starts at the anchor. The `Transaction(timestamp)` and `Transaction(timestamp_epoch)` range indexes are no longer created; only `Account.account_key` and `Transaction.transaction_id` are indexed (with unique constraints).
+- `Account.last_epoch` (maximum sent-or-received `timestamp_epoch`) is maintained by the loader and read with one index lookup. Graphs without it fall back to `max()` aggregated per direction. It is derived only from inference-safe columns.
+- `fan_out`/`fan_in` compute the distinct-counterparty gate and the earliest `result_limit` transfers in one statement, reading counterparty keys from the denormalized `sender_account_key`/`receiver_account_key` transaction properties (kept for this reason) instead of a second expansion.
+- `pass_through` no longer forms the incoming x outgoing cross product. One statement returns an outgoing epoch histogram. A second returns the first `result_limit` incoming legs that have an outgoing leg within the dwell, using interval tests derived from the histogram. Python plans the exact first pairs, and a third statement fetches only the outgoing legs at the needed epochs. Ordering is `(t1, t2)` time as before; ties, unspecified in iteration 1, are broken by transaction ID.
+- `trace_funds` applies `LIMIT $result_limit` per `(direction, depth)` branch. Each branch stays lazy and bounded; results are unchanged whenever no branch exceeded the limit.
+- Copying `timestamp_epoch` onto `SENT`/`RECEIVED` edges was measured and rejected: filtering on the edge property was slower than on the node property (15.7 ms vs 11.2 ms median for 8,808 edges).
+- The loader de-duplicates accounts per batch. `--mode create` is a fresh-load path: it refuses a non-empty graph, creates every account once with its final `last_epoch` (Arrow group-by), then `CREATE`s transactions and edges. `--mode merge` (default) stays idempotent. `source_row_number` is no longer stored; it is never returned and is recoverable from the row-derived ID.
+- `TransactionNotFound` and `AccountNotFound` subclass `ValueError` and keep the iteration-1 messages.
+
+Equivalence: `graph/tests/test_equivalence_live.py` builds a seeded synthetic graph and checks every tool against complete reference result sets from the frozen iteration-1 statements (`graph/src/graph/legacy_queries.py`). Records must be identical, counts must equal `min(limit, reference size)`, and the leading sort-key sequence must match. Legacy window ends are corrected for the comparison. It also checks that merge mode, create mode and the self-contained `BATCH_CYPHER` build identical graphs. Measured results are in `docs/benchmarks/iteration-2-graph-performance.md`.
+
+## ADR-018: Iteration 2 detection model and test-look discipline
+
+**Status:** Proposed (pending lead review)
+
+Adopt the Iteration 2 all-family LightGBM (`s1_all_reg_neg100`) as the detection model for the held-out replay. It uses 76 strictly past-only features in seven families, built by `ml.feature_families`, with regularized LightGBM. It was selected on validation (AP 0.6088) and evaluated once on the frozen test cohort (AP 0.7525; Sept 9-10 bulk AP 0.5996), against Iteration 1's 0.1587. Results and audits are in [the Iteration 2 detection report](benchmarks/iteration-2-detection.md).
+
+Test candidates are pre-declared in `ml/experiments/iteration2_candidates.json` and committed before any test look. Every test evaluation, including re-analysis of frozen scores, is appended to the run's `test_ledger.jsonl` and reported. Report Sept 9-10 bulk metrics next to full-cohort metrics, because the Sept 11-18 tail is near-separable and dominates full-cohort budget recall. Report per-currency amount-weighted recall as defined in ADR-011, never summed across currencies. Treat the static account registry (`kyc` family) as serving-time metadata and keep the no-registry variant (test AP 0.7326) as the robustness reference.
+
+## ADR-019: Separate uv benchmark project with contamination-aware protocol
+
+Status: accepted (Iteration 2).
+
+Context: latency, capacity, and cost need one reproducible command. The model workload needs LightGBM and the capacity workload needs an async HTTP client and process meters. None of these belong in the API's runtime dependencies. The host and FalkorDB server are shared with other jobs.
+
+Decisions:
+
+- `bench/` is its own uv project (`make bench`, `traceaml-bench`). It depends on `traceaml-api` and `traceaml-graph` as editable path dependencies, so it measures the code in the working tree. Direct tool timings go through `api.investigate.FalkorGraphTools` with the investigation's arguments.
+- Protocol: warmups, then N samples, reporting P50/P95/P99/mean (linear interpolation). Capacity runs closed-loop clients in a separate load-generator process against a real uvicorn process. Each run records hardware, OS, Git commit, package versions, FalkorDB configuration, graph counts, input sha256 hashes, and the protocol in `results.json`.
+- Shared-host handling: a quiet gate checks foreign graph calls, blocked FalkorDB clients, FalkorDB CPU, and background host threads before every phase, within a run-wide budget. Every window records background load, contaminated capacity levels are re-measured once, and flagged results are labelled in the summary and snapshot. `--resume` adds missing workloads to an interrupted run after re-checking input hashes.
+- Cost is an explicit estimate: measured CPU-seconds and resident memory at dated, cited cloud list prices, reported both metered and provisioned. LLM cost is reported as zero calls.
+- The demo graph is built by the graph loader (`--mode create --window-around`); the suite's DuckDB slice is only a row-count and hash cross-check. Benchmark graphs must be named `agentbench-*` before the suite deletes or reloads them.

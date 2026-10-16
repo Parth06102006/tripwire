@@ -35,8 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def publish_scores(scores: Path, features: Path, output: Path) -> int:
-    """Write a label-free score artifact after ID reconciliation."""
+def publish_scores(
+    scores: Path, features: Path, output: Path, *, score_column: str = "lgbm_score"
+) -> int:
+    """Write a label-free score artifact after ID reconciliation.
+
+    ``score_column`` names the model score in ``scores``; only that column is
+    projected (as ``score``), so evaluation labels are never copied.
+    """
+    if not score_column.replace("_", "").isalnum():
+        raise ValueError(f"invalid score column name: {score_column}")
     import duckdb
 
     for path in (scores, features):
@@ -50,7 +58,7 @@ def publish_scores(scores: Path, features: Path, output: Path) -> int:
     try:
         con.execute(
             "CREATE TEMP VIEW api_scores AS "
-            "SELECT transaction_id, lgbm_score AS score "
+            f"SELECT transaction_id, {score_column} AS score "
             f"FROM read_parquet('{scores_sql}')"
         )
         con.execute(

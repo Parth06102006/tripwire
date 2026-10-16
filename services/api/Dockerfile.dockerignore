@@ -1,0 +1,12 @@
+# Build context is the repository root; send only what the API image needs.
+*
+!graph/pyproject.toml
+!graph/README.md
+!graph/src/**
+!services/api/pyproject.toml
+!services/api/uv.lock
+!services/api/README.md
+!services/api/src/**
+!docs/benchmarks/**
+**/__pycache__
+**/*.py[cod]

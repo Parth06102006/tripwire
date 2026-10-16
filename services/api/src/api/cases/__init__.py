@@ -1,5 +1,1 @@
-"""Cases domain package."""
-
-from api.cases.router import router
-
-__all__ = ["router"]
+"""Case review persistence: cases, explicit decisions, append-only history."""
