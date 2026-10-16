@@ -55,6 +55,13 @@ All settings use the `TRACEAML_` prefix and may come from the root `.env`.
 | `TRACEAML_CASE_DB_PATH` | `data/cases/cases.db` | SQLite case review store |
 | `TRACEAML_PERFORMANCE_PATH` | `docs/benchmarks/iteration-2-performance.json` | Performance snapshot served by `/api/benchmarks` |
 | `TRACEAML_REPOSITORY_ROOT` | detected | Base for relative artifact paths |
+| `LLM_PROVIDER` | `none` | `gemini` enables the optional report agent (blank means off) |
+| `LLM_API_KEY` | unset | Gemini API key; also read from `GEMINI_API_KEY`. Keep it in `.env` only |
+| `LLM_MODEL` | `gemini-flash-latest` | Gemini model name or alias |
+| `LLM_TIMEOUT_SECONDS` | `30` | Wall-clock limit for the whole agent run |
+| `LLM_MAX_TOOL_CALLS` / `LLM_MAX_ROUNDS` | `6` / `3` | Tool-call and model-round budgets |
+| `LLM_MAX_OUTPUT_TOKENS` | `1500` | Output cap per model call |
+| `LLM_PRICE_INPUT_PER_MTOK` / `LLM_PRICE_OUTPUT_PER_MTOK` | unset | USD per million tokens; cost is reported only if both are set |
 
 Relative paths resolve against the repository root. Responses never include
 hosts, ports, credentials, file paths, exception text, or dataset labels.

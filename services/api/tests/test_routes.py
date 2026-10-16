@@ -251,9 +251,16 @@ def test_investigation_uses_all_three_tools(
         response = client.post("/api/investigations", json=investigation_payload())
     assert response.status_code == 200
     kinds = [kind for kind, _ in tools.calls]
-    # Stage one (trace, counterparties) runs concurrently, then the patterns.
-    assert sorted(kinds[:2]) == ["inspect_counterparties", "trace_funds"]
-    assert sorted(kinds[2:]) == ["pattern:fan_in", "pattern:fan_out", "pattern:pass_through"]
+    # Patterns start as soon as either stage-one tool returns the anchor keys,
+    # so their start order relative to the slower stage-one tool is a race by
+    # design. Assert the set of calls; result order is checked via durations.
+    assert sorted(kinds) == [
+        "inspect_counterparties",
+        "pattern:fan_in",
+        "pattern:fan_out",
+        "pattern:pass_through",
+        "trace_funds",
+    ]
     durations = response.json()["evidence"]["tool_durations_ms"]
     assert [entry["tool"] for entry in durations] == [
         "trace_funds",

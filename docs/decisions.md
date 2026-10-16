@@ -150,3 +150,17 @@ Decisions:
 - Shared-host handling: a quiet gate checks foreign graph calls, blocked FalkorDB clients, FalkorDB CPU, and background host threads before every phase, within a run-wide budget. Every window records background load, contaminated capacity levels are re-measured once, and flagged results are labelled in the summary and snapshot. `--resume` adds missing workloads to an interrupted run after re-checking input hashes.
 - Cost is an explicit estimate: measured CPU-seconds and resident memory at dated, cited cloud list prices, reported both metered and provisioned. LLM cost is reported as zero calls.
 - The demo graph is built by the graph loader (`--mode create --window-around`); the suite's DuckDB slice is only a row-count and hash cross-check. Benchmark graphs must be named `agentbench-*` before the suite deletes or reloads them.
+
+## ADR-020: Gemini report agent: opt-in, bounded, verified, fail-safe
+
+**Status:** Accepted
+
+Implement the PRD's tool-calling investigator with Gemini through the `google-genai` SDK, as an opt-in path (`use_llm` on `POST /api/investigations`) beside the deterministic report. The default path stays deterministic so the measured Iteration 2 latency and zero cost are unchanged; model calls take seconds and cost tokens.
+
+The model is a proposer, not an authority (ADR-006, ADR-007). Automatic SDK function calling is disabled so only whitelisted tools with validated arguments execute: `trace_funds` and `detect_flow_patterns`. It cannot choose the anchor, window, limits, or write Cypher. Total tool calls, rounds, and wall time are capped. The final report is a separate stateless JSON request, which avoids combining tool use with structured output. Code, not the model, fixes the recommendation to human review, and the score and decision are read-only inputs.
+
+A draft is shown only after deterministic verification: cited IDs exist, structured claims match evidenced records field by field, cited paths equal returned paths, and prose identifiers and amount-sized numbers come from evidence. Free-text numbers below 1,000 and descriptive wording are not verified; amounts and dates belong in `cited_claims`, and the prompt requires it. Failures fall back to the deterministic report with a coarse reason code. Graph errors are not masked.
+
+Configuration uses the existing `LLM_PROVIDER`, `LLM_API_KEY`, and `LLM_MODEL` names (also `GEMINI_API_KEY` and `TRACEAML_`-prefixed forms). The key is a Pydantic `SecretStr` read from the git-ignored `.env`, is never logged or returned, and provider error text is discarded. Cost is reported only when both per-million-token prices are configured; none is assumed. The default model alias is `gemini-flash-latest`, configurable because model names change. Retrieved synthetic evidence is sent to Google only on opt-in requests.
+
+Status: unit-tested with a scripted model and an SDK-level stub; not yet exercised against the live Gemini API. A live smoke test is provided and skipped unless a key and `TRACEAML_LIVE_LLM_TEST=1` are set.

@@ -360,6 +360,78 @@ def merge_pattern_matches(
         raise ValueError(f"unknown pattern: {pattern}")
 
 
+class EvidenceBuilder:
+    """Accumulate shaped, de-duplicated evidence from approved tool results.
+
+    Shared by the deterministic investigation and the LLM agent, so both
+    produce evidence through the same field allowlists. Malformed tool rows
+    raise a typed ``InvestigationError`` with no upstream text.
+    """
+
+    def __init__(self, transaction_id: str) -> None:
+        self.transaction_id = transaction_id
+        self.transactions: dict[str, schemas.TransactionEvidence] = {}
+        self.accounts: dict[str, schemas.AccountEvidence] = {}
+        self.paths: list[schemas.GraphPath] = []
+        self.tool_durations: list[schemas.ToolDuration] = []
+
+    def add_traversal(
+        self,
+        tool: Literal["trace_funds", "inspect_counterparties"],
+        result: dict[str, Any],
+    ) -> None:
+        """Merge a ``trace_funds`` or ``inspect_counterparties`` result."""
+        try:
+            self.tool_durations.append(
+                schemas.ToolDuration(
+                    tool=tool,
+                    query_duration_ms=float(result.get("query_duration_ms", 0.0)),
+                )
+            )
+            for row in result.get("transactions", []):
+                record = shape_transaction(row)
+                self.transactions.setdefault(record.transaction_id, record)
+            for entry in result.get("accounts", []):
+                key = str(entry["account_key"])
+                self.accounts.setdefault(key, schemas.AccountEvidence(account_key=key))
+            self.paths.extend(shape_path(path) for path in result.get("paths", []))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InvestigationError() from exc
+
+    def add_pattern(
+        self,
+        pattern: Literal["fan_out", "fan_in", "pass_through"],
+        anchor_key: str,
+        found: dict[str, Any],
+    ) -> None:
+        """Merge one ``detect_flow_patterns`` result anchored at ``anchor_key``."""
+        try:
+            self.tool_durations.append(
+                schemas.ToolDuration(
+                    tool=PATTERN_TOOL_NAMES[pattern],
+                    query_duration_ms=float(found.get("query_duration_ms", 0.0)),
+                )
+            )
+            merge_pattern_matches(
+                found.get("matches", []),
+                pattern,
+                anchor_key,
+                self.transaction_id,
+                self.transactions,
+                self.accounts,
+                self.paths,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InvestigationError() from exc
+
+    def anchor_keys(self) -> tuple[str, str] | None:
+        """Sender and receiver keys of the investigated transfer, once evidenced."""
+        record = self.transactions.get(self.transaction_id)
+        if record is None:
+            return None
+        return record.source_account_key, record.destination_account_key
+
+
 def build_investigation(
     transaction_id: str,
     score: float,
@@ -421,51 +493,18 @@ def build_investigation(
     traced, counterparts = gathered[0], gathered[1]
     found_by_pattern = gathered[2:]
 
-    try:
-        tool_durations = [
-            schemas.ToolDuration(
-                tool="trace_funds",
-                query_duration_ms=float(traced.get("query_duration_ms", 0.0)),
-            ),
-            schemas.ToolDuration(
-                tool="inspect_counterparties",
-                query_duration_ms=float(counterparts.get("query_duration_ms", 0.0)),
-            ),
-        ]
-        transactions: dict[str, schemas.TransactionEvidence] = {}
-        for row in traced.get("transactions", []) + counterparts.get("transactions", []):
-            record = shape_transaction(row)
-            transactions.setdefault(record.transaction_id, record)
-        accounts: dict[str, schemas.AccountEvidence] = {}
-        for entry in traced.get("accounts", []) + counterparts.get("accounts", []):
-            key = str(entry["account_key"])
-            accounts.setdefault(key, schemas.AccountEvidence(account_key=key))
-        paths = [shape_path(path) for path in traced.get("paths", [])]
-    except (KeyError, TypeError, ValueError) as exc:
-        raise InvestigationError() from exc
-
+    builder = EvidenceBuilder(transaction_id)
+    builder.add_traversal("trace_funds", traced)
+    builder.add_traversal("inspect_counterparties", counterparts)
     if found_by_pattern:
         for pattern, found in zip(PATTERN_ORDER, found_by_pattern, strict=True):
-            try:
-                tool_durations.append(
-                    schemas.ToolDuration(
-                        tool=PATTERN_TOOL_NAMES[pattern],
-                        query_duration_ms=float(found.get("query_duration_ms", 0.0)),
-                    )
-                )
-                merge_pattern_matches(
-                    found.get("matches", []),
-                    pattern,
-                    anchors[pattern],
-                    transaction_id,
-                    transactions,
-                    accounts,
-                    paths,
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                raise InvestigationError() from exc
+            builder.add_pattern(pattern, anchors[pattern], found)
     query_duration_ms = (time.perf_counter() - started) * 1000.0
 
+    transactions = builder.transactions
+    accounts = builder.accounts
+    paths = builder.paths
+    tool_durations = builder.tool_durations
     evidence_ids = set(transactions)
     evidence_keys = set(accounts)
     supporting_ids = sorted(evidence_ids)

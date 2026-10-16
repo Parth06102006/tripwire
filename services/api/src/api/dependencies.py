@@ -22,6 +22,7 @@ from api.database import CaseDatabase
 from api.exceptions import GraphUnavailableError, ServiceUnavailableError
 from api.graph import GraphUnavailable, get_graph_pool
 from api.investigate import FalkorGraphTools, GraphTools
+from api.llm import SessionFactory, create_session
 from api.scores import (
     ScoreArtifactInvalid,
     ScoreArtifactUnavailable,
@@ -95,6 +96,11 @@ def get_graph_tools(settings: SettingsDep) -> GraphTools:
     except GraphUnavailable as exc:
         raise GraphUnavailableError() from exc
     return FalkorGraphTools(pool.graph, timeout_ms=settings.graph_query_timeout_ms)
+
+
+def get_llm_session_factory() -> SessionFactory:
+    """Production LLM session factory; tests replace it with a fake."""
+    return create_session
 
 
 def _load_benchmarks(
