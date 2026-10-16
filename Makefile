@@ -4,6 +4,11 @@
 PARQUET ?= data/processed/hi-small-v8/transactions.parquet
 GRAPH_NAME ?= traceaml-demo
 LIMIT ?=
+DEMO_TX ?= hi8-tx-03863669
+FIXTURE ?= demo-1m
+BENCH_GRAPH ?= $(GRAPH_NAME)
+BENCH_LABEL ?= unspecified
+BENCH_ARGS ?=
 API_APP ?= services/api/src/api/app.py
 API_IMAGE ?= traceaml-api
 GRAPH_FEATURES_OUT ?= data/processed/hi-small-v8/graph-features.parquet
@@ -19,9 +24,10 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 .DEFAULT_GOAL := help
 
 .PHONY: help setup env install install-web install-py \
-	up down logs dev-web dev-api api-image 
-	data data-inspect data-prepare data-features data-train data-train-graph data-publish 
-	graph-load graph-load-dry graph-features graph-features-falkordb graph-synth 
+	up down logs dev-web dev-api api-image \
+	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
+	graph-load graph-load-dry graph-load-demo graph-features graph-features-falkordb graph-synth \
+	graph-fixture graph-bench \
 	test test-ml test-graph test-api lint lint-web lint-py build check
 
 help:
@@ -39,6 +45,9 @@ help:
 	@echo   graph-features Build point-in-time graph features (vectorized offline builder)
 	@echo   graph-features-falkordb Cross-check build through FalkorDB (slow; FEATURE_GRAPH)
 	@echo   graph-synth    Write a 5,078,345-row synthetic benchmark Parquet
+	@echo   graph-load-demo Load the two-day demo slice around DEMO_TX into a fresh GRAPH_NAME
+	@echo   graph-fixture  Write the seeded synthetic latency fixture (FIXTURE=demo-1m or full-5m)
+	@echo   graph-bench    Run the warmup + N-sample tool latency benchmark on BENCH_GRAPH
 	@echo   test           Run ml, graph, and api tests
 	@echo   lint           Run ESLint and Ruff
 	@echo   build          Build the web app for production
@@ -124,6 +133,15 @@ graph-features:
 
 graph-features-falkordb:
 	uv run --project graph traceaml-build-graph-features --parquet $(PARQUET) --features-out $(GRAPH_FEATURES_FALKORDB_OUT) --manifest-out $(GRAPH_FEATURES_FALKORDB_MANIFEST) --feature-graph $(FEATURE_GRAPH) $(LIMIT_ARG)
+
+graph-load-demo:
+	uv run --project graph traceaml-load-graph --parquet $(PARQUET) --graph-name $(GRAPH_NAME) --mode create --window-around $(DEMO_TX) --window-seconds 86400
+
+graph-fixture:
+	uv run --project graph traceaml-synthetic-fixture --preset $(FIXTURE)
+
+graph-bench:
+	uv run --project graph traceaml-graph-bench --graph-name $(BENCH_GRAPH) --dataset-label "$(BENCH_LABEL)" $(BENCH_ARGS)
 
 graph-synth:
 	uv run --project graph traceaml-synth-transactions --out $(SYNTH_PARQUET) --rows 5078345 --days 18
