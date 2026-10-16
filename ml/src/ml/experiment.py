@@ -675,6 +675,26 @@ def run_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def day_average_precision(
+    scores: np.ndarray, y: np.ndarray, day: np.ndarray
+) -> dict[str, dict[str, Any]]:
+    """Per calendar day: rows, positives, and AP (None without positives)."""
+    from ml.baselines import average_precision
+
+    report: dict[str, dict[str, Any]] = {}
+    for value in sorted(set(day.tolist())):
+        mask = day == value
+        positives = int(y[mask].sum())
+        report[value] = {
+            "rows": int(mask.sum()),
+            "positives": positives,
+            "average_precision": (
+                average_precision(y[mask], scores[mask]) if positives else None
+            ),
+        }
+    return report
+
+
 def split_report(
     scores: np.ndarray, data: SplitData, threshold: float
 ) -> dict[str, Any]:
@@ -738,6 +758,18 @@ def run_test(args: argparse.Namespace) -> int:
     # Threshold locked on validation before any test label is loaded.
     threshold = select_threshold_max_f1(val_scores, val.y)
     val_report = split_report(val_scores, val, threshold)
+    val_report["by_day"] = day_average_precision(val_scores, val.y, val.day)
+    final_day = max(val.day.tolist())
+    earlier = val.day != final_day
+    val_report["excluding_final_day"] = {
+        "excluded_day": final_day,
+        "rows": int(earlier.sum()),
+        "positives": int(val.y[earlier].sum()),
+        "average_precision": average_precision(val.y[earlier], val_scores[earlier]),
+    }
+    val_frame = pa.table(
+        {"transaction_id": val.ids, LABEL_COLUMN: val.y.astype(np.int8), "score": val_scores}
+    )
     del val
 
     test = load_split(
@@ -751,6 +783,7 @@ def run_test(args: argparse.Namespace) -> int:
     test_scores = predict(booster, test.X, column_index)
     score_seconds = time.perf_counter() - start
     test_report = split_report(test_scores, test, threshold)
+    test_report["by_day"] = day_average_precision(test_scores, test.y, test.day)
 
     run_dir = args.output_dir / "candidates" / config["name"]
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -765,6 +798,7 @@ def run_test(args: argparse.Namespace) -> int:
         ),
         run_dir / "test_scores.parquet",
     )
+    pq.write_table(val_frame, run_dir / "validation_scores.parquet")
     run_config = {
         "created_utc": datetime.now(UTC).isoformat(),
         "tool": "ml.experiment test",
@@ -973,6 +1007,130 @@ def run_truncation_check(args: argparse.Namespace) -> int:
     return 0 if report["passed"] else 1
 
 
+def _accounts_view(con: Any, manifest: dict[str, Any]) -> None:
+    if manifest.get("accounts_csv"):
+        con.execute(
+            f"CREATE OR REPLACE TEMP VIEW {ACCOUNTS_VIEW} AS SELECT "
+            '"Bank ID" AS bank_id, "Account Number" AS account_number, '
+            '"Entity ID" AS entity_id, '
+            "split_part(\"Entity Name\", ' #', 1) AS entity_type "
+            f"FROM read_csv({sql_literal(Path(manifest['accounts_csv']))}, "
+            "all_varchar=true, header=true)"
+        )
+
+
+def _mismatch_sql(columns: list[str], categorical: set[str]) -> list[str]:
+    checks = []
+    for column in columns:
+        if column in categorical:
+            checks.append(f"SUM((a.{column} IS DISTINCT FROM b.{column})::BIGINT)")
+        else:
+            checks.append(
+                f"SUM(CASE WHEN (a.{column} IS NULL) <> (b.{column} IS NULL) THEN 1 "
+                f"WHEN ABS(a.{column} - b.{column}) > 1e-9 * (1 + ABS(b.{column})) "
+                "THEN 1 ELSE 0 END)"
+            )
+    return checks
+
+
+def run_perturbation_check(args: argparse.Namespace) -> int:
+    """Real-data same-minute and future perturbation audit at sampled minutes.
+
+    For each of ``--sample-minutes`` randomly chosen minutes ``m`` with at
+    least 100 rows, the feature input is: every row before ``m`` unchanged; a
+    random half of the rows at ``m`` (the other half, same-minute peers, are
+    deleted); and the next 7 days of rows rewritten (about 30% dropped,
+    receivers swapped with the next row's receiver, amounts multiplied by 7).
+    Rows after that horizon are omitted. Every kept row at ``m`` must have
+    exactly the same 76 features as in the full-data build.
+    """
+    import duckdb
+
+    features_path, manifest = _load_manifest(args.features_dir)
+    families = list(manifest["families"])
+    columns = manifest["feature_columns"]
+    categorical = set(manifest["categorical_columns"])
+    source = sql_literal(args.prepared_parquet)
+    cols = ", ".join(TX_INPUT_COLUMNS)
+    rewritten = ", ".join(
+        {
+            "receiver_bank": "COALESCE(LEAD(receiver_bank) OVER w, receiver_bank)",
+            "receiver_account": "COALESCE(LEAD(receiver_account) OVER w, receiver_account)",
+            "receiver_account_key": (
+                "COALESCE(LEAD(receiver_account_key) OVER w, receiver_account_key)"
+            ),
+            "amount_paid": "amount_paid * 7",
+            "amount_received": "amount_received * 7",
+        }.get(name, name)
+        + f" AS {name}"
+        for name in TX_INPUT_COLUMNS
+    )
+    minutes_report = []
+    con = duckdb.connect()
+    try:
+        con.execute(f"SET memory_limit='{args.memory_limit}'")
+        con.execute(f"SET threads={int(args.threads)}")
+        con.execute(f"SET temp_directory={sql_literal(args.features_dir / 'duckdb-tmp')}")
+        _accounts_view(con, manifest)
+        minutes = [
+            row[0]
+            for row in con.execute(
+                "SELECT ts FROM (SELECT timestamp AS ts FROM read_parquet("
+                f"{source}) WHERE timestamp <= TIMESTAMP '{args.cutoff}' "
+                "GROUP BY timestamp HAVING COUNT(*) >= 100) "
+                f"USING SAMPLE reservoir({int(args.sample_minutes)} ROWS) "
+                f"REPEATABLE ({int(args.seed)}) ORDER BY ts"
+            ).fetchall()
+        ]
+        for minute in minutes:
+            m = f"TIMESTAMP '{minute:%Y-%m-%d %H:%M}'"
+            con.execute(
+                f"CREATE OR REPLACE TEMP TABLE tx_input AS SELECT {cols} FROM "
+                f"read_parquet({source}) WHERE timestamp < {m} "
+                f"OR (timestamp = {m} AND hash(transaction_id) % 2 = 0) "
+                f"UNION ALL SELECT * FROM (SELECT {rewritten} FROM (SELECT {cols} FROM "
+                f"read_parquet({source}) WHERE timestamp > {m} "
+                f"AND timestamp <= {m} + INTERVAL 7 DAY AND hash(transaction_id) % 10 >= 3) "
+                "WINDOW w AS (ORDER BY transaction_id))"
+            )
+            removed = con.execute(
+                f"SELECT COUNT(*) FROM read_parquet({source}) WHERE timestamp = {m} "
+                "AND hash(transaction_id) % 2 = 1"
+            ).fetchone()[0]
+            perturbed = build_families(con, "tx_input", families)
+            result = con.execute(
+                "SELECT COUNT(*), " + ", ".join(_mismatch_sql(columns, categorical))
+                + f" FROM {perturbed} a JOIN read_parquet({sql_literal(features_path)}) b "
+                f"USING (transaction_id) WHERE b.timestamp = {m}"
+            ).fetchone()
+            minutes_report.append(
+                {
+                    "minute": f"{minute:%Y-%m-%d %H:%M}",
+                    "probe_rows": int(result[0]),
+                    "same_minute_peers_removed": int(removed),
+                    "mismatched_columns": {
+                        c: int(v) for c, v in zip(columns, result[1:], strict=True) if v
+                    },
+                }
+            )
+            print(json.dumps(minutes_report[-1]), flush=True)
+    finally:
+        con.close()
+    report = {
+        "created_utc": datetime.now(UTC).isoformat(),
+        "seed": args.seed,
+        "cutoff": args.cutoff,
+        "columns_checked": len(columns),
+        "probe_rows_total": sum(r["probe_rows"] for r in minutes_report),
+        "minutes": minutes_report,
+        "passed": all(not r["mismatched_columns"] for r in minutes_report),
+    }
+    out = args.features_dir / "perturbation-check.json"
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps({k: v for k, v in report.items() if k != "minutes"}, indent=2))
+    return 0 if report["passed"] else 1
+
+
 def _add_fit_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--features-dir", type=Path, required=True)
     parser.add_argument("--prepared-parquet", type=Path, required=True)
@@ -1025,6 +1183,15 @@ def build_parser() -> argparse.ArgumentParser:
     trunc.add_argument("--threads", type=int, default=3)
     trunc.add_argument("--memory-limit", default="2GB")
 
+    pert = sub.add_parser("perturbation-check", help="real-data same-minute/future audit")
+    pert.add_argument("--features-dir", type=Path, required=True)
+    pert.add_argument("--prepared-parquet", type=Path, required=True)
+    pert.add_argument("--cutoff", required=True, help="inclusive, e.g. 2022-09-08 00:00")
+    pert.add_argument("--sample-minutes", type=int, default=3)
+    pert.add_argument("--seed", type=int, default=20221016)
+    pert.add_argument("--threads", type=int, default=4)
+    pert.add_argument("--memory-limit", default="3GB")
+
     pub = sub.add_parser("publish", help="publish target-free scores for a candidate")
     pub.add_argument("--features-dir", type=Path, required=True)
     pub.add_argument("--output-dir", type=Path, required=True)
@@ -1041,6 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
         "test": run_test,
         "rescore": run_rescore,
         "truncation-check": run_truncation_check,
+        "perturbation-check": run_perturbation_check,
         "publish": run_publish,
     }
     return handlers[args.command](args)

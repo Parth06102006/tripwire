@@ -595,5 +595,17 @@
     "neg_sample_rate": 0.1,
     "seed": 2,
     "sample_seed": 2
+  },
+  {
+    "name": "s4_all_no_kyc_neg100",
+    "families": [
+      "base",
+      "txlocal",
+      "velocity",
+      "amount",
+      "counterparty",
+      "cycle"
+    ],
+    "neg_sample_rate": 1.0
   }
 ]
