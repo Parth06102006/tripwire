@@ -355,6 +355,15 @@ def test_unknown_transaction_raises_typed_error() -> None:
     assert issubclass(queries.TransactionNotFound, ValueError)
 
 
+def test_declarative_cypher_mirror_is_in_sync() -> None:
+    from pathlib import Path
+
+    mirror = (Path(__file__).resolve().parents[1] / "queries.cypher").read_text(encoding="utf-8")
+    for statement in queries.ALL_QUERIES:
+        assert statement.rstrip() in mirror
+    assert queries._trace_branch("outgoing", 2) in mirror
+
+
 def test_trace_duration_covers_anchor_lookup() -> None:
     class SlowAnchor(FakeGraph):
         def query(self, cypher, params=None, timeout=None):
