@@ -18,6 +18,10 @@ GRAPH_FEATURES_FALKORDB_OUT ?= data/processed/hi-small-v8/graph-features-falkord
 GRAPH_FEATURES_FALKORDB_MANIFEST ?= data/processed/hi-small-v8/graph-features-falkordb-manifest.json
 GRAPH_ABLATION_DIR ?= artifacts/runs/hi-small-v8/graph-ablation
 SYNTH_PARQUET ?= data/interim/synthetic/hi-small-shape.parquet
+SUITE_RUN_ROOT ?= artifacts/runs/hi-small-v8
+SUITE_SLICE ?= data/interim/bench/demo-slice.parquet
+SUITE_GRAPH ?= agentbench-demo
+SUITE_ARGS ?=
 
 LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 
@@ -28,7 +32,7 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
 	graph-load graph-load-dry graph-load-demo graph-features graph-features-falkordb graph-synth \
 	graph-fixture graph-bench \
-	test test-ml test-graph test-api lint lint-web lint-py build check
+	test test-ml test-graph test-api test-bench lint lint-web lint-py build check bench bench-quick
 
 help:
 	@echo TraceAML make targets
@@ -48,7 +52,9 @@ help:
 	@echo   graph-load-demo Load the two-day demo slice around DEMO_TX into a fresh GRAPH_NAME
 	@echo   graph-fixture  Write the seeded synthetic latency fixture (FIXTURE=demo-1m or full-5m)
 	@echo   graph-bench    Run the warmup + N-sample tool latency benchmark on BENCH_GRAPH
-	@echo   test           Run ml, graph, and api tests
+	@echo   bench          Run the full latency, capacity, and cost suite (SUITE_ARGS=...)
+	@echo   bench-quick    Smoke-run the suite with reduced repeats
+	@echo   test           Run ml, graph, api, and bench tests
 	@echo   lint           Run ESLint and Ruff
 	@echo   build          Build the web app for production
 	@echo   check          lint + test + build
@@ -71,6 +77,7 @@ install-py:
 	uv sync --project ml
 	uv sync --project graph
 	uv sync --project services/api
+	uv sync --project bench
 
 # ---------------------------------------------------------------------------
 # Services
@@ -147,10 +154,20 @@ graph-synth:
 	uv run --project graph traceaml-synth-transactions --out $(SYNTH_PARQUET) --rows 5078345 --days 18
 
 # ---------------------------------------------------------------------------
+# Benchmarks (requires FalkorDB, the prepared Parquet, and baseline artifacts)
+# ---------------------------------------------------------------------------
+
+bench:
+	uv run --project bench traceaml-bench --run-root $(SUITE_RUN_ROOT) --transactions $(PARQUET) --slice-out $(SUITE_SLICE) --graph-name $(SUITE_GRAPH) $(SUITE_ARGS)
+
+bench-quick:
+	uv run --project bench traceaml-bench --run-root $(SUITE_RUN_ROOT) --transactions $(PARQUET) --slice-out $(SUITE_SLICE) --graph-name $(SUITE_GRAPH) --quick --levels 1,4 --api-workers 1 $(SUITE_ARGS)
+
+# ---------------------------------------------------------------------------
 # Quality
 # ---------------------------------------------------------------------------
 
-test: test-ml test-graph test-api
+test: test-ml test-graph test-api test-bench
 
 test-ml:
 	uv run --directory ml pytest -q
@@ -161,6 +178,9 @@ test-graph:
 test-api:
 	uv run --directory services/api pytest -q
 
+test-bench:
+	uv run --directory bench pytest -q
+
 lint: lint-web lint-py
 
 lint-web:
@@ -170,6 +190,7 @@ lint-py:
 	uv run --directory ml ruff check .
 	uv run --directory graph ruff check .
 	uv run --directory services/api ruff check .
+	uv run --directory bench ruff check .
 
 build:
 	pnpm build

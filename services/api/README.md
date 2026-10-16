@@ -53,6 +53,7 @@ All settings use the `TRACEAML_` prefix and may come from the root `.env`.
 | `TRACEAML_GRAPH_QUERY_TIMEOUT_MS` | `5000` | Server-side timeout per graph query |
 | `TRACEAML_GRAPH_POOL_SIZE` | `16` | Max pooled FalkorDB connections per process |
 | `TRACEAML_CASE_DB_PATH` | `data/cases/cases.db` | SQLite case review store |
+| `TRACEAML_PERFORMANCE_PATH` | `docs/benchmarks/iteration-2-performance.json` | Performance snapshot served by `/api/benchmarks` |
 | `TRACEAML_REPOSITORY_ROOT` | detected | Base for relative artifact paths |
 
 Relative paths resolve against the repository root. Responses never include

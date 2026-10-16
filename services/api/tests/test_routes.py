@@ -20,6 +20,7 @@ from api.scores import (
     ScoreRepository,
     load_scores,
 )
+from api.settings import REPOSITORY_ROOT, Settings
 
 THRESHOLD = 0.5
 
@@ -178,6 +179,9 @@ def test_benchmarks_reads_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         encoding="utf-8",
     )
     monkeypatch.setenv("TRACEAML_BASELINE_METRICS_PATH", str(metrics))
+    monkeypatch.setenv(
+        "TRACEAML_PERFORMANCE_PATH", str(REPOSITORY_ROOT / "docs/benchmarks/iteration-1-performance.json")
+    )
     with make_client() as client:
         response = client.get("/api/benchmarks")
     assert response.status_code == 200
@@ -478,3 +482,20 @@ def test_schemas_reject_label_keys() -> None:
             result_limit=5,
             is_illicit=1,  # type: ignore[call-arg]
         )
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    ["iteration-1-performance.json", "iteration-2-performance.json"],
+)
+def test_versioned_performance_snapshots_match_contract(snapshot: str) -> None:
+    """Every committed snapshot validates against the served schema."""
+    path = REPOSITORY_ROOT / "docs" / "benchmarks" / snapshot
+    summary = schemas.PerformanceSummary.model_validate_json(path.read_text(encoding="utf-8"))
+    assert summary.cost.external_llm_calls == 0
+    assert "Synthetic" in summary.dataset_label
+
+
+def test_default_performance_snapshot_exists() -> None:
+    """The default TRACEAML_PERFORMANCE_PATH points at a committed snapshot."""
+    assert (REPOSITORY_ROOT / Settings.model_fields["performance_path"].default).is_file()

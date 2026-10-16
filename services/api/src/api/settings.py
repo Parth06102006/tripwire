@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     graph_metrics_path: str = Field(
         default="artifacts/runs/hi-small-v8/graph-ablation/baseline_metrics.json"
     )
-    performance_path: str = Field(default="docs/benchmarks/iteration-1-performance.json")
+    performance_path: str = Field(default="docs/benchmarks/iteration-2-performance.json")
     score_model: str = Field(default="lgbm")
     case_db_path: str = Field(default="data/cases/cases.db")
 
