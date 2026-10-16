@@ -128,3 +128,17 @@ Decisions:
 - `TransactionNotFound` and `AccountNotFound` subclass `ValueError` and keep the iteration-1 messages.
 
 Equivalence: `graph/tests/test_equivalence_live.py` builds a seeded synthetic graph and checks every tool against complete reference result sets from the frozen iteration-1 statements (`graph/src/graph/legacy_queries.py`). Records must be identical, counts must equal `min(limit, reference size)`, and the leading sort-key sequence must match. Legacy window ends are corrected for the comparison. It also checks that merge mode, create mode and the self-contained `BATCH_CYPHER` build identical graphs. Measured results are in `docs/benchmarks/iteration-2-graph-performance.md`.
+
+## ADR-018: Separate uv benchmark project with contamination-aware protocol
+
+Status: accepted (Iteration 2).
+
+Context: latency, capacity, and cost need one reproducible command. The model workload needs LightGBM and the capacity workload needs an async HTTP client and process meters. None of these belong in the API's runtime dependencies. The host and FalkorDB server are shared with other jobs.
+
+Decisions:
+
+- `bench/` is its own uv project (`make bench`, `traceaml-bench`). It depends on `traceaml-api` and `traceaml-graph` as editable path dependencies, so it measures the code in the working tree. Direct tool timings go through `api.investigate.FalkorGraphTools` with the investigation's arguments.
+- Protocol: warmups, then N samples, reporting P50/P95/P99/mean (linear interpolation). Capacity runs closed-loop clients in a separate load-generator process against a real uvicorn process. Each run records hardware, OS, Git commit, package versions, FalkorDB configuration, graph counts, input sha256 hashes, and the protocol in `results.json`.
+- Shared-host handling: a quiet gate checks foreign graph calls, blocked FalkorDB clients, FalkorDB CPU, and background host threads before every phase, within a run-wide budget. Every window records background load, contaminated capacity levels are re-measured once, and flagged results are labelled in the summary and snapshot. `--resume` adds missing workloads to an interrupted run after re-checking input hashes.
+- Cost is an explicit estimate: measured CPU-seconds and resident memory at dated, cited cloud list prices, reported both metered and provisioned. LLM cost is reported as zero calls.
+- The demo graph is built by the graph loader (`--mode create --window-around`); the suite's DuckDB slice is only a row-count and hash cross-check. Benchmark graphs must be named `agentbench-*` before the suite deletes or reloads them.

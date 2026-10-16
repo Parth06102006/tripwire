@@ -15,12 +15,12 @@ from helpers import (
 
 from api import schemas
 from api.app import create_app, get_graph_tools, get_score_repository
-from api.settings import REPOSITORY_ROOT, Settings
 from api.scores import (
     ScoreArtifactInvalid,
     ScoreRepository,
     load_scores,
 )
+from api.settings import REPOSITORY_ROOT, Settings
 
 THRESHOLD = 0.5
 

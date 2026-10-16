@@ -12,6 +12,7 @@ It does not connect to banks, freeze funds, file regulatory reports, or claim pr
 apps/web/                 Next.js analyst workbench
 services/api/             FastAPI, policy, investigation orchestration
 ml/                       Data inspection, preparation, features, models, metrics
+bench/                    Latency, capacity, and cost benchmark suite (make bench)
 graph/                    FalkorDB schema, indexes, and Cypher query definitions
 data/raw/                 User-provided source data; ignored by Git
 data/processed/           Normalized Parquet and split artifacts; ignored by Git
