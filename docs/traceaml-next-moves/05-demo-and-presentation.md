@@ -18,9 +18,22 @@ Address an AML analyst or investigator, not an abstract “AI user.” An isolat
 
 Avoid opening with a long model architecture tour. Start with the analyst problem, then prove that relationships change what the system can find and do.
 
+### Landing page and guided walkthrough
+
+The landing page should offer two clear routes:
+
+- **Walk me through an investigation:** launch a guided visual story based on one completed run of the agent.
+- **Open the workbench:** go directly to the interactive dashboard.
+
+The guided story follows the real run in short steps: alert and LightGBM score, selected graph tool and bounded arguments, FalkorDB's returned multi-hop path, evidence verification, and the resulting local review-case action. Highlight only nodes, edges, IDs and values present in that run's response. Include short analyst-facing explanations of what each component did and what the result does not prove.
+
+Capture the story source from an actual completed agent execution after the MCP path and case action work. Generate a small reproducible manifest with the anchor, graph/data and score artifact identifiers, tool calls, returned evidence, verification result and case-action reference. Keep this data-derived manifest under an ignored local artifact path; document its schema and generation command, but do not commit transaction records or evidence. Keep target labels and typology truth out of the manifest and all client-facing story data. Label the experience as a recorded investigation on synthetic data; do not imply each step is a new live provider call.
+
+At the end, **Explore this case** should open the workbench with the same anchor selected and its case available, either from the persisted demo state or a documented seed step. The analyst can inspect the evidence or rerun the investigation. A separate dashboard case with no matching path or an inconclusive result should show that the agent does not invent evidence. If the captured run or provider is unavailable, the story still works from the verified run artifact and the interactive workbench retains its deterministic fallback.
+
 ## 3. Recommended 3–4 minute live demo
 
-Choose the exact anchor transaction and expected paths before recording. Store a reproducible case manifest in the repo that includes the transaction ID and test graph/score artifact hashes, but do not expose the target label to the agent or online API. The presenter can later explain the outcome using the offline evaluation record.
+Choose the exact anchor transaction and expected paths before recording. Store the reproducible case manifest under an ignored local artifact path and document how to regenerate it. It can include the transaction ID and graph/score artifact hashes, but must not include target labels or typology truth. The presenter can explain the outcome using the separate offline evaluation record; the agent and online API must never receive that label.
 
 ### 0:00–0:20 — Problem and product
 

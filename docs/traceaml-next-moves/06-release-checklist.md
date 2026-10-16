@@ -77,6 +77,12 @@ Test the README on a fresh checkout or clean environment, not just the developer
 
 ## 6. UI/UX and case lifecycle gate
 
+- [ ] Landing page offers a guided investigation walkthrough and direct dashboard entry.
+- [ ] Walkthrough uses a manifest captured from an actual completed agent run, not invented or hand-authored graph results.
+- [ ] The transaction-level walkthrough manifest stays in an ignored local artifact path; only its schema and regeneration instructions are committed.
+- [ ] Walkthrough data contains no laundering labels or typology truth and is labeled as a recorded synthetic-data investigation.
+- [ ] Every displayed tool call, path, transaction ID, amount and verification state matches the captured evidence.
+- [ ] “Explore this case” opens the workbench with the same anchor selected and its case available after documented setup/seed steps.
 - [ ] Alerts route shows real API data, not placeholder content.
 - [ ] Investigation route shows returned graph paths and a legible evidence table.
 - [ ] Case creation and confirm/dismiss/review history work from the UI.

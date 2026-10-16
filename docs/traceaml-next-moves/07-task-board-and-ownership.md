@@ -20,7 +20,7 @@ The implementation report's role-charter map lists Ashwani for graph/data engine
 | Currency feature fix, model finalization, benchmarks | Priyanshu — evaluation | Can start immediately; coordinate feature API with data owner |
 | FalkorDB/MCP integration and query behavior | Ashwani — graph/data | Reuse existing query module; expose stable tool contracts |
 | Agent bridge, verifier/action API and tests | Parth — API/integration | Needs stable MCP tool and evidence schema |
-| Case workflow, agent trace and polish | Kanishka — UI | Needs final response schema from API owner |
+| Landing walkthrough, case workflow and agent trace | Kanishka — UI with API support | Needs the captured run manifest and final response schema |
 | Integration gate, demo script and submission | Priyanshu + all owners | Depends on candidate freeze and working e2e path |
 
 ## P0 task list
@@ -82,12 +82,17 @@ The implementation report's role-charter map lists Ashwani for graph/data engine
 **Owner:** Frontend + API  
 **Done when:** optional provider call can be explicitly requested; default deterministic path works with no key; failures fall back visibly; no secret/upstream exception is exposed.
 
-### P1-06 — Clean performance pass
+### P1-06 — Guided landing walkthrough
+
+**Owner:** Frontend + API/integration
+**Done when:** landing page offers a guided walkthrough or direct dashboard entry; the story is sourced from a verified, label-free real-run manifest kept in ignored local artifacts; only its schema and generation instructions are committed; every displayed graph fact matches the captured evidence; “Explore this case” opens the same anchor and persisted/seeded case in the workbench.
+
+### P1-07 — Clean performance pass
 
 **Owner:** Bench/evaluation  
 **Done when:** demo graph and full graph results are separate; typical/hub/max-depth anchors are measured; contaminated windows are excluded or labeled; live agent latency/cost is measured only if a live call ran.
 
-### P1-07 — Final demo and submission assets
+### P1-08 — Final demo and submission assets
 
 **Owner:** Integration lead + all  
 **Done when:** positive and negative/inconclusive cases are rehearsed, a readable demo video is recorded, public repo/docs work, Track 1 is selected and AI-assistant use is disclosed.
@@ -120,7 +125,7 @@ Graph tool contract ─> P1-01 MCP ─> P1-02 case action ─> P1-03/P1-04 UI
                           Early end-to-end demo checkpoint
                                                |
                                                v
-                        P1-06 performance ─> P1-07 release/video
+                        P1-07 performance ─> P1-08 release/video
 ```
 
 The UI work may proceed with mock API responses for layout development, but the final demo must use real endpoints and real graph results. Freeze shared response schemas early so parallel work does not produce integration drift.

@@ -140,6 +140,14 @@ The Gemini agent currently defaults off. Keep it opt-in. Provide a control to re
 
 Clicking a claim should highlight the relevant path and show the supporting transactions, timestamps, amounts and currencies. Clearly label later-observed records if the view includes information after the scored timestamp. Do not make the graph visualization the sole evidence—provide a legible textual table as well.
 
+### Task 4.5: Add a guided landing-page walkthrough
+
+Give users two entry choices: a guided visual story or the interactive workbench. Build the story from a manifest captured from one actual completed agent run, including the selected tool, bounded arguments, FalkorDB response, verifier result and case-action reference. Keep this data-derived manifest in an ignored local artifact path; commit only its schema and generation instructions, not transaction records or evidence. Each step should explain the product behavior while highlighting only evidence from that run. Label it as a recorded investigation on synthetic data; keep target labels and typology truth out of all client-facing data.
+
+The final “Explore this case” action must open the dashboard with the same anchor selected and its case available. Support this with a persisted demo case or an explicit seed step. The story must not require a live Gemini call on every visit, and the dashboard must still support the deterministic path when the provider is unavailable.
+
+**Acceptance:** the guided flow uses a generated, label-free run manifest; displayed IDs, paths and values match the captured API evidence; the handoff opens the same case in the workbench; direct dashboard entry remains available; transaction-level manifest data is excluded from Git.
+
 ## 5. P1 — Clean performance verification
 
 Repeat these separately:
@@ -171,4 +179,4 @@ Do not put contaminated capacity measurements forward as uncontaminated evidence
 
 ## 8. Final exit gate
 
-The project is ready when a clean setup can reproduce the chosen benchmark, launch FalkorDB and the API, load target-free scores, investigate a real case through bounded graph tools, validate the result, open/enrich a local case, let a reviewer inspect it in the UI, and complete the same flow in the recorded demo.
+The project is ready when a clean setup can reproduce the chosen benchmark, launch FalkorDB and the API, load target-free scores, investigate a real case through bounded graph tools, validate the result, open/enrich a local case, let a reviewer inspect it in the UI, and complete the same flow in both the guided landing walkthrough and recorded demo.
