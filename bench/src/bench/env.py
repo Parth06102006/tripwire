@@ -153,28 +153,39 @@ class FalkorMeter:
         return int(self._redis.info("clients").get("blocked_clients", 0))
 
     def activity(self, seconds: float) -> dict[str, float]:
-        """Server activity over ``seconds`` while this suite is idle."""
+        """Server and host activity over ``seconds`` while this suite is idle."""
         calls = self.graph_query_calls()
         cpu = self.cpu_seconds()
+        host = host_busy_seconds()
+        suite = suite_cpu_seconds()
         blocked = 0
         deadline = time.perf_counter() + seconds
         while time.perf_counter() < deadline:
             blocked = max(blocked, self.blocked_clients())
             time.sleep(0.2)
+        falkor = self.cpu_seconds() - cpu
+        other = host_busy_seconds() - host - (suite_cpu_seconds() - suite) - falkor
         return {
             "graph_query_calls": self.graph_query_calls() - calls,
-            "cpu_cores_busy": (self.cpu_seconds() - cpu) / seconds,
+            "cpu_cores_busy": falkor / seconds,
             "max_blocked_clients": blocked,
+            "foreign_host_cores": other / seconds,
         }
 
     def wait_for_quiet(
-        self, max_wait_seconds: float, *, probe_seconds: float = 3.0, cpu_cores: float = 0.15
+        self,
+        max_wait_seconds: float,
+        *,
+        probe_seconds: float = 3.0,
+        cpu_cores: float = 0.15,
+        host_cores: float = 1.5,
     ) -> dict[str, Any]:
-        """Wait until no other client is running graph queries.
+        """Wait until no other client is running graph queries and the host is idle.
 
         Quiet means one probe window with no graph query calls, no blocked
-        clients, and server CPU below ``cpu_cores``. Returns how long the
-        wait took and whether quiet was reached; the run continues either
+        clients, FalkorDB CPU below ``cpu_cores``, and other host processes
+        using fewer than ``host_cores`` hardware threads. Returns how long
+        the wait took and whether quiet was reached; the run continues either
         way, and results are flagged when it was not.
         """
         started = time.perf_counter()
@@ -185,6 +196,7 @@ class FalkorMeter:
                 last["graph_query_calls"] == 0
                 and last["max_blocked_clients"] == 0
                 and last["cpu_cores_busy"] < cpu_cores
+                and last["foreign_host_cores"] < host_cores
             )
             waited = time.perf_counter() - started
             if quiet or waited >= max_wait_seconds:
@@ -198,6 +210,17 @@ class FalkorMeter:
 
     def close(self) -> None:
         self._redis.close()
+
+
+def host_busy_seconds() -> float:
+    """Busy CPU seconds summed over all host hardware threads."""
+    times = psutil.cpu_times()
+    return sum(times) - times.idle
+
+
+def suite_cpu_seconds() -> float:
+    """CPU seconds of this suite: the bench process, API server, and load generator."""
+    return tree_cpu_seconds(psutil.Process())
 
 
 def tree_processes(root: psutil.Process) -> list[psutil.Process]:
@@ -251,9 +274,18 @@ class ResourceWindow:
         self._peak_blocked = 0
         self._data: dict[str, Any] = {}
 
+    def _tree_rss(self) -> int:
+        total = 0
+        for proc in self._procs:
+            try:
+                total += proc.memory_info().rss
+            except psutil.Error:
+                continue
+        return total
+
     def _sample(self) -> None:
         while not self._stop.is_set():
-            self._peak_rss = max(self._peak_rss, tree_rss_bytes(self._root))
+            self._peak_rss = max(self._peak_rss, self._tree_rss())
             if self._falkor is not None:
                 try:
                     self._peak_falkor = max(self._peak_falkor, self._falkor.used_memory())
@@ -263,8 +295,13 @@ class ResourceWindow:
             self._stop.wait(self._interval)
 
     def __enter__(self) -> Self:
-        self._start_rss = tree_rss_bytes(self._root)
+        # Enumerate the tree once: repeated child enumeration is expensive on
+        # Windows and would steal CPU from the measured workload.
+        self._procs = tree_processes(self._root)
+        self._start_rss = self._tree_rss()
         self._start_cpu = tree_cpu_seconds(self._root)
+        self._start_host = host_busy_seconds()
+        self._start_suite = suite_cpu_seconds()
         if self._falkor is not None:
             self._start_falkor_cpu = self._falkor.cpu_seconds()
             self._start_falkor_mem = self._falkor.used_memory()
@@ -277,11 +314,15 @@ class ResourceWindow:
         wall = time.perf_counter() - self._start_wall
         self._stop.set()
         self._thread.join()
+        host = host_busy_seconds() - self._start_host
+        suite = suite_cpu_seconds() - self._start_suite
         self._data = {
             "wall_seconds": wall,
             "process_cpu_seconds": tree_cpu_seconds(self._root) - self._start_cpu,
             "process_rss_start_mib": self._start_rss / 2**20,
             "process_rss_peak_mib": max(self._peak_rss, self._start_rss) / 2**20,
+            "host_busy_cores": host / wall if wall > 0 else 0.0,
+            "suite_cores": suite / wall if wall > 0 else 0.0,
         }
         if self._falkor is not None:
             self._data.update(
@@ -297,6 +338,10 @@ class ResourceWindow:
                     "falkordb_max_blocked_clients": self._peak_blocked,
                 }
             )
+        falkor = self._data.get("falkordb_cpu_seconds", 0.0)
+        # Host CPU used by anything other than this suite and FalkorDB (the
+        # FalkorDB container's CPU reaches the host through the WSL VM).
+        self._data["foreign_host_cores"] = (host - suite - falkor) / wall if wall > 0 else 0.0
 
     def result(self) -> dict[str, Any]:
         return dict(self._data)

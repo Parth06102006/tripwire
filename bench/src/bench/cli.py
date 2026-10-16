@@ -25,6 +25,9 @@ from typing import Any
 
 ALL_WORKLOADS = ("model", "graph", "api", "capacity")
 DEFAULT_ANCHOR = "hi8-tx-03863669"
+# Other host processes may use at most this many hardware threads during a
+# measured window before the window is flagged as contaminated.
+HOST_FOREIGN_CORES = 1.5
 
 
 def log(message: str) -> None:
@@ -69,6 +72,18 @@ def build_parser(repo: Path) -> argparse.ArgumentParser:
         "--quick", action="store_true", help="Smoke run with reduced repeats and durations."
     )
     parser.add_argument("--publish-snapshot", type=Path, default=None)
+    parser.add_argument(
+        "--quiet-budget-seconds",
+        type=float,
+        default=2400.0,
+        help="Total quiet-gate waiting allowed per run.",
+    )
+    parser.add_argument(
+        "--level-attempts",
+        type=int,
+        default=2,
+        help="Max measurements of a capacity level when foreign load contaminates it.",
+    )
     parser.add_argument(
         "--quiet-wait-seconds",
         type=float,
@@ -120,7 +135,7 @@ def select_sample(
 
 
 def main(argv: list[str] | None = None) -> int:
-    from api.settings import REPOSITORY_ROOT
+    from api.settings import REPOSITORY_ROOT, Settings
 
     from bench import api_load, demo_slice, env, graph_tools, model, report
     from bench.cost import build_cost_model
@@ -151,7 +166,8 @@ def main(argv: list[str] | None = None) -> int:
         "baseline_config": baselines / "baseline_config.json",
         "baseline_metrics": baselines / "baseline_metrics.json",
         "graph_metrics": args.run_root / "graph-ablation" / "baseline_metrics.json",
-        "performance_snapshot_served": repo / "docs/benchmarks/iteration-1-performance.json",
+        # The API serves its configured default snapshot during the run.
+        "performance_snapshot_served": repo / Settings.model_fields["performance_path"].default,
     }
     missing = [name for name, path in inputs.items() if not path.is_file()]
     if missing:
@@ -223,13 +239,19 @@ def main(argv: list[str] | None = None) -> int:
     gates: list[dict[str, Any]] = []
     results["quiet_gates"] = gates
 
+    budget = {"remaining": args.quiet_budget_seconds}
+
     def gate(phase: str) -> None:
         if args.quiet_wait_seconds <= 0:
             return
-        outcome = meter.wait_for_quiet(args.quiet_wait_seconds)
+        # A long-running foreign job must not stall the suite for hours: once
+        # the run-wide budget is spent, each gate only probes once.
+        allowed = max(0.0, min(args.quiet_wait_seconds, budget["remaining"]))
+        outcome = meter.wait_for_quiet(allowed)
+        budget["remaining"] -= outcome["waited_seconds"]
         gates.append({"phase": phase, **outcome})
         if not outcome["quiet"]:
-            log(f"WARNING: FalkorDB not idle before {phase}; results flagged")
+            log(f"WARNING: host or FalkorDB not idle before {phase}; results flagged")
         elif outcome["waited_seconds"] > 10:
             log(f"waited {outcome['waited_seconds']:.0f} s for FalkorDB to go idle before {phase}")
 
@@ -316,15 +338,23 @@ def main(argv: list[str] | None = None) -> int:
             results["graph_tools"]["database_calls_per_investigation"] = calls_per_investigation
             save()
 
-        def attribute(resources: dict[str, Any], own_calls: float | None, own_parallel: int) -> None:
-            """Flag server-wide FalkorDB counters that include other clients' work."""
+        def attribute(resources: dict[str, Any], own_calls: float | None, own_parallel: int) -> bool:
+            """Flag windows whose counters include other clients' or processes' work.
+
+            Returns True when the window is clean: no foreign graph calls, no
+            more blocked FalkorDB clients than this suite can cause, and
+            other host processes below ``HOST_FOREIGN_CORES`` threads.
+            """
+            host_clean = resources.get("foreign_host_cores", 0.0) < HOST_FOREIGN_CORES
+            resources["host_isolated"] = host_clean
             if "falkordb_graph_query_calls" not in resources or own_calls is None:
-                return
+                return host_clean
             foreign = resources["falkordb_graph_query_calls"] - own_calls
             resources["foreign_graph_calls_estimate"] = foreign
             resources["falkordb_cpu_isolated"] = (
                 abs(foreign) < 1 and resources["falkordb_max_blocked_clients"] <= own_parallel
             )
+            return bool(resources["falkordb_cpu_isolated"]) and host_clean
 
         server_env = {
             "TRACEAML_FALKORDB_HOST": args.host,
@@ -455,19 +485,7 @@ def main(argv: list[str] | None = None) -> int:
                             args.investigation_duration,
                         ),
                     ):
-                        levels = api_load.capacity_sweep(
-                            server,
-                            meter,
-                            gate=gate,
-                            method=method,
-                            path=path,
-                            bodies=bodies,
-                            levels=_ints(args.levels),
-                            duration=duration,
-                            warmup_per_client=1,
-                            log=log,
-                        )
-                        for level in levels:
+                        def classify(level: dict[str, Any], name: str = name) -> bool:
                             res = level["resources"]
                             own = (
                                 0.0
@@ -478,11 +496,26 @@ def main(argv: list[str] | None = None) -> int:
                                     else None
                                 )
                             )
-                            attribute(
+                            return attribute(
                                 res,
                                 own,
                                 own_parallel=0 if name == "alerts" else 5 * level["concurrency"],
                             )
+
+                        levels = api_load.capacity_sweep(
+                            server,
+                            meter,
+                            gate=gate,
+                            classify=classify,
+                            max_attempts=args.level_attempts,
+                            method=method,
+                            path=path,
+                            bodies=bodies,
+                            levels=_ints(args.levels),
+                            duration=duration,
+                            warmup_per_client=1,
+                            log=log,
+                        )
                         capacity[f"{name}_w{workers}"] = {
                             "endpoint": f"{method} {path}",
                             "workers": workers,

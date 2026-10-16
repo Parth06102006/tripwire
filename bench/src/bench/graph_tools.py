@@ -129,6 +129,7 @@ def run_graph_tool_workloads(
                     resources["falkordb_cpu_seconds"] / repeats
                 )
                 entry["falkordb_max_blocked_clients"] = resources["falkordb_max_blocked_clients"]
+                entry["foreign_host_cores"] = resources["foreign_host_cores"]
                 entry["falkordb_cpu_isolated"] = (
                     foreign == 0 and resources["falkordb_max_blocked_clients"] <= 1
                 )

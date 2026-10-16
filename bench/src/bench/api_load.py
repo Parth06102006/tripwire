@@ -16,12 +16,14 @@ transport exceptions (timeouts included).
 from __future__ import annotations
 
 import asyncio
+import multiprocessing as mp
 import os
 import socket
 import subprocess
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Self
 
@@ -281,37 +283,78 @@ def capacity_sweep(
     warmup_per_client: int,
     log: Any,
     gate: Any = None,
+    classify: Any = None,
+    max_attempts: int = 2,
 ) -> list[dict[str, Any]]:
+    """Sweep concurrency levels; rerun a level once when it was contaminated.
+
+    The load generator runs in its own process so the resource sampler in
+    this process cannot steal interpreter time from it. ``classify(level)``
+    annotates a finished level and returns True when no foreign load was
+    observed; a contaminated level is re-measured after the quiet gate, up
+    to ``max_attempts`` times, and every attempt is kept in ``attempts``.
+    """
     assert server.process is not None
     results = []
-    for concurrency in levels:
-        if gate is not None:
-            gate(f"capacity {method} {path} w{server.workers} c{concurrency}")
-        log(f"capacity: {method} {path} workers={server.workers} c={concurrency}")
-        with ResourceWindow(server.process, falkor, interval=0.2) as window:
-            level = asyncio.run(
-                _closed_loop(
-                    server.base_url,
-                    method,
-                    path,
-                    bodies,
-                    concurrency,
-                    duration,
-                    warmup_per_client,
+    with ProcessPoolExecutor(max_workers=1, mp_context=mp.get_context("spawn")) as loadgen:
+        for concurrency in levels:
+            attempts: list[dict[str, Any]] = []
+            for attempt in range(1, max_attempts + 1):
+                if gate is not None:
+                    gate(f"capacity {method} {path} w{server.workers} c{concurrency}")
+                log(
+                    f"capacity: {method} {path} workers={server.workers} c={concurrency}"
+                    f" attempt {attempt}"
                 )
-            )
-        resources = window.result()
-        # The window also covers the warmup requests; count them so CPU per
-        # request is not overstated.
-        ok = level["requests"] - level["errors"] + concurrency * warmup_per_client
-        resources["requests_in_window"] = ok
-        resources["api_cpu_seconds_per_ok_request"] = (
-            resources["process_cpu_seconds"] / ok if ok else None
-        )
-        if "falkordb_cpu_seconds" in resources:
-            resources["falkordb_cpu_seconds_per_ok_request"] = (
-                resources["falkordb_cpu_seconds"] / ok if ok else None
-            )
-        level["resources"] = resources
-        results.append(level)
+                with ResourceWindow(server.process, falkor, interval=0.5) as window:
+                    level = loadgen.submit(
+                        run_closed_loop,
+                        server.base_url,
+                        method,
+                        path,
+                        bodies,
+                        concurrency,
+                        duration,
+                        warmup_per_client,
+                    ).result()
+                resources = window.result()
+                # The window also covers the warmup requests; count them so CPU
+                # per request is not overstated.
+                ok = level["requests"] - level["errors"] + concurrency * warmup_per_client
+                resources["requests_in_window"] = ok
+                resources["api_cpu_seconds_per_ok_request"] = (
+                    resources["process_cpu_seconds"] / ok if ok else None
+                )
+                if "falkordb_cpu_seconds" in resources:
+                    resources["falkordb_cpu_seconds_per_ok_request"] = (
+                        resources["falkordb_cpu_seconds"] / ok if ok else None
+                    )
+                level["resources"] = resources
+                level["attempt"] = attempt
+                clean = classify(level) if classify is not None else True
+                level["clean"] = bool(clean)
+                attempts.append(level)
+                if clean:
+                    break
+            final = attempts[-1]
+            final["attempts"] = [
+                {key: value for key, value in prior.items() if key != "attempts"}
+                for prior in attempts[:-1]
+            ]
+            results.append(final)
     return results
+
+
+def run_closed_loop(
+    base_url: str,
+    method: str,
+    path: str,
+    bodies: list[dict[str, Any]] | None,
+    concurrency: int,
+    duration: float,
+    warmup_per_client: int,
+) -> dict[str, Any]:
+    """Process entry point for one closed-loop level (picklable for spawn)."""
+    return asyncio.run(
+        _closed_loop(base_url, method, path, bodies, concurrency, duration, warmup_per_client)
+    )

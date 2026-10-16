@@ -205,6 +205,7 @@ def run_model_workloads(
             "cpu_seconds_median": cpu,
             "cpu_seconds_per_1000_transactions": cpu / len(ids) * 1000.0,
             "peak_rss_mib": max(w["process_rss_peak_mib"] for w in windows),
+            "foreign_host_cores_max": max(w["foreign_host_cores"] for w in windows),
             "matrix_mib": matrix.nbytes / 2**20,
         }
     result["full_test_cohort"] = cohort

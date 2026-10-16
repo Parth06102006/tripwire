@@ -212,8 +212,8 @@ def render_markdown(results: dict[str, Any]) -> str:
                 f"### {sweep['endpoint']}, {sweep['workers']} uvicorn worker(s)",
                 "",
                 ("| Clients | Requests | Throughput | P50 | P95 | P99 | Error rate | "
-                "API CPU s/req | FalkorDB CPU s/req |"),
-                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "API CPU s/req | FalkorDB CPU s/req | Other host threads | Clean |"),
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
             ]
             for level in sweep["levels"]:
                 res = level["resources"]
@@ -225,7 +225,9 @@ def render_markdown(results: dict[str, Any]) -> str:
                     f"| {level['concurrency']} | {level['requests']} | "
                     f"{level['throughput_rps']:,.2f}/s | {_ms(level['p50_ms'])} | "
                     f"{_ms(level['p95_ms'])} | {_ms(level['p99_ms'])} | "
-                    f"{level['error_rate']:.1%} | {api_text} | {db_text} |"
+                    f"{level['error_rate']:.1%} | {api_text} | {db_text} | "
+                    f"{res.get('foreign_host_cores', float('nan')):.1f} | "
+                    f"{'yes' if level.get('clean', True) else 'no'} |"
                 )
             knee = sweep["knee"]
             lines += [
