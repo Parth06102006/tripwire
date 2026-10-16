@@ -210,17 +210,25 @@ def _scalar_rows(graph: Any, cypher: str, params: dict[str, Any] | None = None,
     return graph.query(cypher, params=params or {}, timeout=timeout_ms).result_set
 
 
-def select_anchors(graph: Any, *, per_class: int, seed: int) -> list[dict[str, Any]]:
-    """Pick ``high`` and ``typical`` anchor transactions deterministically."""
+def select_anchors(
+    graph: Any, *, per_class: int, seed: int, explicit: tuple[str, ...] = ()
+) -> list[dict[str, Any]]:
+    """Pick ``case`` (explicit), ``high`` and ``typical`` anchors deterministically."""
     import random
 
     anchors: list[dict[str, Any]] = []
     half = max(1, per_class // 2)
     seen: set[str] = set()
-    for cypher, latest, role in (
+    for transaction_id in explicit:
+        if transaction_id not in seen:
+            seen.add(transaction_id)
+            anchors.append({"class": "case", "role": "explicit", "transaction_id": transaction_id})
+    explicit_only = per_class == 0
+    degree_sources = () if explicit_only else (
         (TOP_DEGREE_SENT, LATEST_SENT_TX, "top_sender"),
         (TOP_DEGREE_RECEIVED, LATEST_RECEIVED_TX, "top_receiver"),
-    ):
+    )
+    for cypher, latest, role in degree_sources:
         for key, degree in _scalar_rows(graph, cypher, {"k": half}):
             rows = _scalar_rows(graph, latest, {"account_key": key})
             if rows and rows[0][0] not in seen:
@@ -233,7 +241,7 @@ def select_anchors(graph: Any, *, per_class: int, seed: int) -> list[dict[str, A
     rng = random.Random(seed)
     attempts = 0
     typical = 0
-    while typical < per_class and attempts < per_class * 10 and total > 0:
+    while not explicit_only and typical < per_class and attempts < per_class * 10 and total > 0:
         attempts += 1
         offset = rng.randrange(total)
         rows = _scalar_rows(graph, TX_AT_OFFSET, {"offset": offset})
@@ -243,6 +251,8 @@ def select_anchors(graph: Any, *, per_class: int, seed: int) -> list[dict[str, A
             typical += 1
     for anchor in anchors:
         rows = _scalar_rows(graph, ENDPOINTS, {"transaction_id": anchor["transaction_id"]})
+        if not rows:
+            raise ValueError(f"anchor transaction not in graph: {anchor['transaction_id']}")
         anchor["sender_key"], anchor["receiver_key"] = rows[0]
         for side in ("sender", "receiver"):
             out_degree, in_degree = _scalar_rows(
@@ -346,7 +356,7 @@ def run_protocol(
     tools: dict[str, Any] = {}
     for name, rows in raw.items():
         entry: dict[str, Any] = {"all": summarize([r["ms"] for r in rows])}
-        for cls in ("high", "typical"):
+        for cls in ("case", "high", "typical"):
             entry[cls] = summarize([r["ms"] for r in rows if r["class"] == cls])
         sizes = [r["result_size"] for r in rows]
         if sizes and name != "investigation":
@@ -369,7 +379,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--dataset-label", default="unspecified",
                         help="Free-text label, e.g. 'synthetic demo-1m fixture'.")
-    parser.add_argument("--anchors-per-class", type=int, default=6)
+    parser.add_argument("--anchors-per-class", type=int, default=6,
+                        help="High-degree and typical anchors each (0: explicit anchors only).")
+    parser.add_argument("--anchor-transactions", default="",
+                        help="Comma-separated transaction IDs measured as class 'case'.")
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--samples", type=int, default=10)
     parser.add_argument("--seed", type=int, default=20_221_001)
@@ -387,7 +400,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--record-anchors", action="store_true",
                         help="Write anchor IDs into the JSON (synthetic fixtures only).")
     args = parser.parse_args(argv)
-    for name in ("anchors_per_class", "samples"):
+    if args.anchors_per_class < 0 or (
+        args.anchors_per_class == 0 and not args.anchor_transactions
+    ):
+        parser.error("--anchors-per-class must be positive unless --anchor-transactions is set")
+    for name in ("samples",):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.warmup < 0:
@@ -414,7 +431,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": f"graph {args.graph_name} has no transactions"}))
         return 2
     selected_started = time.perf_counter()
-    anchors = select_anchors(graph, per_class=args.anchors_per_class, seed=args.seed)
+    explicit = tuple(t.strip() for t in args.anchor_transactions.split(",") if t.strip())
+    anchors = select_anchors(
+        graph, per_class=args.anchors_per_class, seed=args.seed, explicit=explicit
+    )
     selection_seconds = time.perf_counter() - selected_started
     calls = tool_calls(
         q, max_hops=args.max_hops, window=args.time_window_seconds,
@@ -432,8 +452,9 @@ def main(argv: list[str] | None = None) -> int:
     measured_at = datetime.now(UTC)
     anchor_summary = [
         {key: value for key, value in anchor.items()
-         if args.record_anchors or key in ("class", "role", "hub_degree",
-                                            "sender_degree", "receiver_degree")}
+         if args.record_anchors
+        or key in ("class", "role", "hub_degree", "sender_degree", "receiver_degree")
+        or (anchor["class"] == "case" and key == "transaction_id")}
         for anchor in anchors
     ]
     report = {
