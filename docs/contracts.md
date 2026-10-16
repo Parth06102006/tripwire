@@ -135,7 +135,7 @@ Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `open
 
 All tool queries are parameterized and bounded. An empty result is not evidence that no suspicious activity exists outside the query scope.
 
-The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together. Account-anchored inspection and pattern queries center their window on the account's latest sent or received transaction. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
+The current query implementation caps traversal at 1-3 hops, time windows at 30 days, result counts at 100, and client query timeouts at 30 seconds. `trace_funds` measures its anchor lookup and traversal together, and applies the row limit to each (direction, depth) branch, so it returns at most `result_limit` paths per branch. The window of account-anchored inspection and pattern queries ends at the account's latest sent or received transaction (`Account.last_epoch`; the iteration-1 statement returned an arbitrary epoch, ADR-017). Unknown anchors raise `graph.queries.TransactionNotFound` or `AccountNotFound`. Both are `ValueError` subclasses and keep the messages `unknown transaction_id: ...` and `unknown account_key or no account activity: ...`. `fan_in` and `fan_out` require a minimum count of distinct counterparties; `pass_through` returns two-hop chains within the configured dwell time. Amounts retain their source currencies.
 
 ## Data and model evaluation contract
 
