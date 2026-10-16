@@ -73,6 +73,12 @@ def build_parser(repo: Path) -> argparse.ArgumentParser:
     )
     parser.add_argument("--publish-snapshot", type=Path, default=None)
     parser.add_argument(
+        "--resume",
+        type=Path,
+        default=None,
+        help="Existing run directory: add the selected workloads to its results.json.",
+    )
+    parser.add_argument(
         "--quiet-budget-seconds",
         type=float,
         default=2400.0,
@@ -174,8 +180,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": f"missing inputs: {missing}"}))
         return 2
 
-    run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out_dir = args.run_root / "bench" / run_id
+    prior: dict[str, Any] | None = None
+    if args.resume is not None:
+        prior = json.loads((args.resume / "results.json").read_text(encoding="utf-8"))
+        run_id = str(prior["run_id"])
+        out_dir = args.resume
+    else:
+        run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        out_dir = args.run_root / "bench" / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     log(f"writing to {out_dir}")
 
@@ -225,6 +237,26 @@ def main(argv: list[str] | None = None) -> int:
             "quick": args.quick,
         },
     }
+    if prior is not None:
+        # Resume: keep completed workloads from the interrupted run, refuse
+        # if any input changed, and record what this invocation added.
+        changed = [
+            name
+            for name, entry in results["inputs"].items()
+            if prior["inputs"].get(name, {}).get("sha256") != entry["sha256"]
+        ]
+        if changed:
+            print(json.dumps({"error": f"inputs changed since the resumed run: {changed}"}))
+            return 1
+        resume_entry = {
+            "started_utc": datetime.now(UTC).isoformat(),
+            "workloads": sorted(workloads),
+            "git": results["environment"]["git"],
+        }
+        prior["protocol"]["workloads"] = sorted(set(prior["protocol"]["workloads"]) | workloads)
+        prior.setdefault("resumes", []).append(resume_entry)
+        prior.setdefault("quiet_gates", [])
+        results = prior
 
     meter = env.FalkorMeter(args.host, args.port)
     needs_graph = bool(workloads & {"graph", "api", "capacity"})
@@ -236,8 +268,7 @@ def main(argv: list[str] | None = None) -> int:
             "foreign_activity": {"before_queries_per_second": foreign_rate(meter)},
         }
 
-    gates: list[dict[str, Any]] = []
-    results["quiet_gates"] = gates
+    gates: list[dict[str, Any]] = results.setdefault("quiet_gates", [])
 
     budget = {"remaining": args.quiet_budget_seconds}
 
@@ -546,7 +577,7 @@ def main(argv: list[str] | None = None) -> int:
     results["cost"] = build_cost_model(results)
     save()
     (out_dir / "summary.md").write_text(report.render_markdown(results), encoding="utf-8")
-    if {"model", "graph", "api"} <= workloads:
+    if all(key in results for key in ("model", "graph_tools", "api_serial")):
         from api.schemas import PerformanceSummary
 
         snapshot = report.build_snapshot(results)

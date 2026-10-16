@@ -126,6 +126,15 @@ def render_markdown(results: dict[str, Any]) -> str:
             f"| Iteration 1, 1 thread | 761,639 | {ITERATION_1['cohort_seconds']:.3f} s | "
             f"{ITERATION_1['cohort_tps']:,.0f} tx/s | n/a | 0 |"
         )
+        busy = max(
+            entry.get("foreign_host_cores_max", 0.0) for entry in model["full_test_cohort"].values()
+        )
+        if busy >= 1.5:
+            lines += [
+                "",
+                (f"CONTAMINATED: other host processes used up to {busy:.1f} hardware threads during "
+                "the model workload; treat these timings as an upper bound."),
+            ]
     serial = results.get("api_serial")
     if serial:
         lines += [
@@ -365,6 +374,7 @@ def build_snapshot(results: dict[str, Any]) -> dict[str, Any]:
         "execution_mode": (
             "Serial latency plus closed-loop concurrency sweeps against a real uvicorn process "
             "over loopback"
+            + _contamination_note(results)
         ),
         "run_id": results["run_id"],
         "git_commit": env["git"]["commit"],
@@ -424,6 +434,15 @@ def build_snapshot(results: dict[str, Any]) -> dict[str, Any]:
             "investigation_provisioned_usd": inv_cost.get("provisioned_usd"),
         },
     }
+
+
+def _contamination_note(results: dict[str, Any]) -> str:
+    noisy = sorted(
+        {gate["phase"].split(" ")[0] for gate in results.get("quiet_gates", []) if not gate["quiet"]}
+    )
+    if not noisy:
+        return ""
+    return f"; host not idle at the start of: {', '.join(noisy)} (timings are upper bounds)"
 
 
 def _int_or_none(value: Any) -> int | None:

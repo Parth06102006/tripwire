@@ -90,8 +90,18 @@ class FalkorMeter:
 
     def __init__(self, host: str, port: int) -> None:
         import redis
+        from redis.backoff import ExponentialBackoff
+        from redis.retry import Retry
 
-        self._redis = redis.Redis(host=host, port=port, socket_timeout=30)
+        # Counter reads must survive a briefly stalled server (seen after a
+        # host reboot) instead of aborting the whole run.
+        self._redis = redis.Redis(
+            host=host,
+            port=port,
+            socket_timeout=30,
+            retry=Retry(ExponentialBackoff(cap=10, base=1), 5),
+            retry_on_error=[redis.exceptions.TimeoutError, redis.exceptions.ConnectionError],
+        )
 
     def config(self) -> dict[str, Any]:
         raw = self._redis.execute_command("GRAPH.CONFIG", "GET", "*")
