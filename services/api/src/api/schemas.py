@@ -198,13 +198,35 @@ class GraphPath(StrictModel):
     transaction_ids: list[str]
 
 
+ToolName = Literal[
+    "trace_funds",
+    "inspect_counterparties",
+    "detect_flow_patterns.fan_out",
+    "detect_flow_patterns.fan_in",
+    "detect_flow_patterns.pass_through",
+]
+
+
+class ToolDuration(StrictModel):
+    """Duration one approved graph tool measured around its own queries."""
+
+    tool: ToolName
+    query_duration_ms: float
+
+
 class InvestigationEvidence(StrictModel):
-    """Evidence arrays containing only records returned by executed queries."""
+    """Evidence arrays containing only records returned by executed queries.
+
+    ``query_duration_ms`` is the wall time of the whole graph evidence phase;
+    tools run concurrently. ``tool_durations_ms`` lists each tool's own
+    measured duration, so their sum can exceed the wall time.
+    """
 
     transactions: list[TransactionEvidence]
     accounts: list[AccountEvidence]
     paths: list[GraphPath]
     query_duration_ms: float
+    tool_durations_ms: list[ToolDuration] = Field(default_factory=list)
 
 
 class InvestigationReport(StrictModel):

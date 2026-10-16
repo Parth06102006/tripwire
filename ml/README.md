@@ -150,3 +150,12 @@ model results, latency, and cost are not included.
 
 All output paths are ignored by Git. Command output contains aggregates
 only, never transaction rows.
+
+## Graph-feature ablation
+
+`make data-train-graph` builds the point-in-time graph sidecar with the
+vectorized offline builder (`traceaml-build-graph-features-batch`, ADR-015).
+It then trains the `lgbm_graph` arm with
+`traceaml-train-baselines --graph-features data/processed/hi-small-v8/graph-features.parquet`.
+The FalkorDB builder (`make graph-features-falkordb`) produces identical
+values and remains available as a cross-check.

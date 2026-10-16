@@ -84,6 +84,74 @@ never need Docker or the dataset.
 
 ## Point-in-time graph features
 
+Two builders produce the same target-free sidecar (`transaction_id` plus
+five `gfeat_*` int64 columns) with row-for-row identical values:
+
+- `traceaml-build-graph-features-batch` (default, `make graph-features`):
+  vectorized offline build from the Parquet projection. No database needed.
+- `traceaml-build-graph-features` (cross-check,
+  `make graph-features-falkordb`): streams minute groups through a FalkorDB
+  feature graph.
+
+### Vectorized builder (default)
+
+```sh
+uv run --project graph traceaml-build-graph-features-batch \
+  --parquet data/processed/hi-small-v8/transactions.parquet \
+  --features-out data/processed/hi-small-v8/graph-features.parquet \
+  --manifest-out data/processed/hi-small-v8/graph-features-manifest.json
+```
+
+Same CLI shape as the FalkorDB builder (`--limit`, `--window-seconds`,
+`--spill-dir`). DuckDB reads only the four allowlisted columns ordered by
+`(timestamp, transaction_id)`. NumPy then deduplicates transfers to
+pair-minute events. Event `i` of pair `(a, b)` contributes to query minutes `e`
+in `(t_i, min(next_i, t_i + window)]`, so each distinct-counterparty count is
+`#{starts < e} - #{ends < e}` over account-major sorted keys (two binary
+searches). Prior reverse flow compares the first `b -> a` transfer minute
+with `e`. Semantics shared with the FalkorDB builder:
+
+- Group epoch is the timestamp truncated to the minute; naive timestamps are UTC.
+- Rows see only transfers in strictly earlier minutes; same-minute peers are
+  mutually invisible.
+- Recent-eligible: the pair's latest earlier transfer minute is
+  `>= group_epoch - window` (inclusive lower bound).
+- Reverse flow is all-time prior (not windowed).
+- Self-transfers are ordinary pairs: an account counts as its own out- and
+  in-counterparty.
+- Duplicate rows each get an output row.
+- `--limit` drops the final, possibly partial minute.
+
+The batch builder rejects null projected values instead of coercing them.
+The manifest records the source sha256, row reconciliation, distinct
+minutes/accounts, window, semantics, phase timings, and peak process memory.
+
+Synthetic benchmark on the local machine. The data is random with Zipf-like degrees and is
+not HI-Small:
+
+| Input | FalkorDB builder | Batch builder |
+| --- | ---: | ---: |
+| 200,000-row prefix | 130.1 s | 1.1 s (identical output) |
+| 5,078,345 rows, 18 days | not run (Iteration 1 real data: 1,563 s) | 11.3-13.2 s, 1.4 GiB peak |
+
+Reproduce with:
+
+```sh
+uv run --project graph traceaml-synth-transactions --out data/interim/synthetic/hi-small-shape.parquet
+uv run --project graph traceaml-build-graph-features-batch \
+  --parquet data/interim/synthetic/hi-small-shape.parquet \
+  --features-out data/interim/synthetic/bench/batch.parquet \
+  --manifest-out data/interim/synthetic/bench/batch.json
+```
+
+Parity tests: `tests/test_feature_batch.py` compares the batch builder with
+a brute-force evaluation of the semantics and with the streaming builder on an
+in-memory fake graph. `tests/test_feature_parity.py` compares it with the
+real FalkorDB builder on the seeded adversarial synthetic table. That test uses
+throwaway `agentfeat-parity-*` graphs and skips when FalkorDB is unreachable.
+
+### FalkorDB builder (cross-check)
+
 `traceaml-build-graph-features` streams the normalized Parquet through a
 DuckDB out-of-core sort over exactly four columns
 (`transaction_id`, `timestamp`, `sender_account_key`,
