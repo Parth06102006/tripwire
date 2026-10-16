@@ -13,7 +13,8 @@
       "id": "C2",
       "name": "s4_all_no_kyc_neg100",
       "role": "robustness: same as C1 without the static account-registry (kyc) family",
-      "validation_average_precision": null
+      "validation_average_precision": 0.5881,
+      "note": "validation value filled in after its stage-4 validation run; the candidate itself was declared in commit 797b1c7 before any test look"
     },
     {
       "id": "C3",

@@ -177,3 +177,7 @@ def test_end_to_end_runner(tmp_path: Path) -> None:
     ]) == 0
     published = pq.read_table(run_dir / "inference_scores.parquet")
     assert published.column_names == ["transaction_id", "timestamp", "score"]
+    api_config = json.loads((run_dir / "api_threshold_config.json").read_text(encoding="utf-8"))
+    assert set(api_config["thresholds"]) == {"lgbm"}
+    assert "target_is_laundering" not in api_config["feature_columns"]
+    assert (run_dir / "candidates" / "full" / "validation_scores.parquet").is_file()

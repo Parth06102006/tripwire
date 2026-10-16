@@ -933,6 +933,20 @@ def run_publish(args: argparse.Namespace) -> int:
         "columns": ["transaction_id", "timestamp", "score"],
         "labels_read": False,
     }
+    # API-compatible threshold file (services/api reads thresholds[score_model]).
+    model_config = json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    api_config = {
+        "tool": "ml.experiment publish",
+        "candidate": args.candidate,
+        "threshold_rule": model_config["threshold_rule"],
+        "thresholds": {"lgbm": model_config["threshold"]},
+        "feature_columns": model_config["feature_columns"],
+        "label_column": LABEL_COLUMN,
+        "split_manifest_sha256": model_config["split_manifest_sha256"],
+    }
+    api_path = args.output_dir / "api_threshold_config.json"
+    api_path.write_text(json.dumps(api_config, indent=2), encoding="utf-8")
+    manifest["api_threshold_config"] = str(api_path)
     path = args.output_dir / "inference_scores-manifest.json"
     path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))
