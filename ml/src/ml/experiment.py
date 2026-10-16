@@ -601,6 +601,14 @@ def run_validate(args: argparse.Namespace) -> int:
         configs = [c for c in configs if c["name"] in set(args.only)]
     if args.name_prefix:
         configs = [c for c in configs if c["name"].startswith(tuple(args.name_prefix))]
+    ledger_path = args.output_dir / VALIDATION_LEDGER
+    if args.skip_done and ledger_path.is_file():
+        done = {
+            json.loads(line)["config_hash"]
+            for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        }
+        configs = [c for c in configs if config_hash(c) not in done]
     if not configs:
         print(json.dumps({"error": "no configurations selected"}))
         return 2
@@ -993,6 +1001,10 @@ def build_parser() -> argparse.ArgumentParser:
     val.add_argument("--only", nargs="*", default=None, help="config names to run")
     val.add_argument("--name-prefix", nargs="*", default=None, help="config name prefixes")
     val.add_argument("--skip-train-ap", action="store_true")
+    val.add_argument(
+        "--skip-done", action="store_true",
+        help="skip configs whose hash already appears in the validation ledger",
+    )
 
     test = sub.add_parser("test", help="evaluate ONE pre-declared candidate on test")
     _add_fit_args(test)
