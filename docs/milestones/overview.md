@@ -32,11 +32,11 @@ The point-in-time graph feature builder processed all 5,078,345 transactions int
 
 - [x] Ingest a bounded chronological prefix idempotently into first-class `Transaction` nodes and reconcile transaction/edge counts.
 - [x] Implement and live-smoke-test bounded `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`.
-- [ ] Load and benchmark the complete 5,078,345-transaction graph on hardware with sufficient memory.
+- [x] Load and benchmark the complete 5,078,345-transaction graph (Iteration 2: 520.9 s load, 2,514 MB graph memory, 23.2 ms P50 case investigation; see [graph performance](../benchmarks/iteration-2-graph-performance.md)).
 - [x] Serve validated scoring and investigation contracts through FastAPI.
 - [x] Serve a ranked target-free replay queue, benchmark artifacts, deterministic decisions, and verified graph-investigation responses.
 - [x] Load a target-free demo slice containing a held-out replay case and verify a live API investigation against FalkorDB.
-- [ ] Preserve deterministic policy and human-confirmed case-memory provenance.
+- [x] Preserve deterministic policy and human-confirmed case-memory provenance (append-only SQLite case history; graph-side case links remain deferred).
 
 ### Analyst workbench and evidence
 
@@ -49,7 +49,9 @@ The point-in-time graph feature builder processed all 5,078,345 transactions int
 
 - [x] Document clean setup and data placement without committing data or credentials.
 - [x] Record metric definitions, split, feature set, hardware, serial workload protocol, latency, throughput, and costs that remain unpriced.
-- [ ] Provide graph schema and queries, reproducible benchmark instructions, and demo materials.
+- [x] Provide graph schema and queries and reproducible benchmark instructions (`make bench`, `make graph-bench`; see the Iteration 2 reports).
+- [ ] Provide demo materials (video/walkthrough).
+- [ ] Connect the optional tool-calling LLM report drafter with deterministic fallback and measured cost.
 
 ## Ownership
 
