@@ -8,8 +8,10 @@ highest-scored held-out transaction). Rows are written in source file order.
 
 Only the graph loader's allowlisted columns (``graph.load_graph.LOAD_COLUMNS``)
 are projected, so ``target_is_laundering``, ``split``, and typology fields
-never reach the slice file or the graph. The slice is then loaded with the
-graph package's own loader, unchanged, so loader improvements are picked up.
+never reach the slice file or the graph. The graph itself is built by the
+graph package's loader (``--mode create --window-around ANCHOR
+--window-seconds 86400``, the same rule), so loader improvements are picked
+up; the slice file here is an independent row-count and hash cross-check.
 """
 
 from __future__ import annotations
@@ -108,6 +110,7 @@ def graph_counts(host: str, port: int, graph_name: str) -> dict[str, int] | None
 def ensure_demo_graph(
     slice_info: SliceInfo,
     *,
+    source: Path,
     host: str,
     port: int,
     graph_name: str,
@@ -129,21 +132,29 @@ def ensure_demo_graph(
             client.select_graph(graph_name).delete()
         finally:
             client.close()
-    log(f"loading {slice_info.rows} rows into {graph_name} with traceaml-load-graph")
+    log(f"loading {slice_info.rows} rows into {graph_name} with traceaml-load-graph --window-around")
     started = time.perf_counter()
+    # The graph package's own windowed create-mode loader builds the slice;
+    # the bench slice file above is kept only as a row-count and hash check.
     completed = subprocess.run(
         [
             sys.executable,
             "-m",
             "graph.load_graph",
             "--parquet",
-            str(slice_info.path),
+            str(source),
             "--graph-name",
             graph_name,
             "--host",
             host,
             "--port",
             str(port),
+            "--mode",
+            "create",
+            "--window-around",
+            slice_info.anchor_transaction_id,
+            "--window-seconds",
+            str(SLICE_HALF_WIDTH_SECONDS),
         ],
         capture_output=True,
         text=True,
@@ -154,6 +165,8 @@ def ensure_demo_graph(
         raise RuntimeError(f"graph load failed: {completed.stdout[-2000:]}{completed.stderr[-2000:]}")
     summary = json.loads(completed.stdout[completed.stdout.index("{") :])
     counts = graph_counts(host, port, graph_name)
+    if counts is None or counts["transactions"] != slice_info.rows:
+        raise RuntimeError("loaded graph does not reconcile with the bench slice row count")
     return {
         "reloaded": True,
         "load_wall_seconds": elapsed,

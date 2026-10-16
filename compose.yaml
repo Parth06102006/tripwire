@@ -3,9 +3,14 @@ services:
     image: falkordb/falkordb-server:latest
     ports:
       - "6379:6379"
-      - "3000:3000"
+      # FalkorDB browser on host port 3001 so it does not collide with the
+      # Next.js dev server on 3000.
+      - "3001:3000"
     volumes:
-      - falkordb-data:/data
+      # The image persists RDB snapshots to /var/lib/falkordb/data (/data is
+      # only a symlink to it); mounting /data left graphs in the container
+      # layer, so recreating the container lost them.
+      - falkordb-data:/var/lib/falkordb/data
     restart: unless-stopped
 
 volumes:

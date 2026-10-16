@@ -280,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
             info = demo_slice.build_slice(args.transactions, args.slice_out, args.anchor)
             loaded = demo_slice.ensure_demo_graph(
                 info,
+                source=args.transactions,
                 host=args.host,
                 port=args.port,
                 graph_name=args.graph_name,

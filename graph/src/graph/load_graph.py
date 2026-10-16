@@ -34,14 +34,15 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 GRAPH_NAME_DEFAULT = "traceaml"
 HOST_DEFAULT = "localhost"
 PORT_DEFAULT = 6379
-BATCH_SIZE_DEFAULT = 1000
+BATCH_SIZE_DEFAULT = 5000
+ACCOUNT_BATCH_SIZE = 20_000
 TIMEOUT_MS_DEFAULT = 30_000
 LIMIT_HELP = (
     "Load only the first N rows in file order as a representative prefix "
@@ -72,7 +73,13 @@ LOAD_COLUMNS: tuple[str, ...] = (
 
 # Property allowlist mirrored into Transaction nodes. Must stay free of
 # offline-only columns; see OFFLINE_ONLY_GUARD in tests.
+# ``source_row_number`` is not stored: it is never returned as evidence and is
+# recoverable from the row-derived ``transaction_id`` (``hi8-tx-{row:08d}``).
+# ``sender_account_key``/``receiver_account_key`` are deliberately kept
+# (denormalized): account-anchored queries read the counterparty key from the
+# transaction instead of paying a second expansion per transfer.
 TRANSACTION_PROPERTIES: tuple[str, ...] = (
+    "transaction_id",
     "timestamp",
     "timestamp_epoch",
     "sender_account_key",
@@ -82,20 +89,28 @@ TRANSACTION_PROPERTIES: tuple[str, ...] = (
     "amount_received",
     "receiving_currency",
     "payment_format",
-    "source_row_number",
 )
+
+# Property allowlist for Account nodes. ``last_epoch`` is the maximum
+# sent-or-received ``timestamp_epoch`` over the loaded transactions (a
+# derived, label-free activity bound used to anchor account windows).
+ACCOUNT_PROPERTIES: tuple[str, ...] = ("account_key", "bank", "account_id", "last_epoch")
 
 TIMESTAMP_DISPLAY_FORMAT = "%Y-%m-%d %H:%M"
 
-BATCH_CYPHER = """\
-UNWIND $rows AS r
-MERGE (s:Account {account_key: r.sender_key})
-ON CREATE SET s.bank = r.sender_bank, s.account_id = r.sender_account
-MERGE (d:Account {account_key: r.receiver_key})
-ON CREATE SET d.bank = r.receiver_bank, d.account_id = r.receiver_account
-MERGE (t:Transaction {transaction_id: r.transaction_id})
-ON CREATE SET
-  t.timestamp = r.timestamp,
+LOAD_MODES: tuple[str, ...] = ("merge", "create")
+
+# Accounts are de-duplicated per batch client-side and upserted once each.
+# ``last_epoch`` only ever increases, so re-running the same rows is a no-op.
+ACCOUNT_UPSERT_CYPHER = """UNWIND $accounts AS acc
+MERGE (a:Account {account_key: acc.key})
+ON CREATE SET a.bank = acc.bank, a.account_id = acc.account, a.last_epoch = acc.last_epoch
+ON MATCH SET a.last_epoch = CASE
+  WHEN a.last_epoch IS NULL OR acc.last_epoch > a.last_epoch THEN acc.last_epoch
+  ELSE a.last_epoch END
+"""
+
+_TRANSACTION_SET = """  t.timestamp = r.timestamp,
   t.timestamp_epoch = r.timestamp_epoch,
   t.sender_account_key = r.sender_key,
   t.receiver_account_key = r.receiver_key,
@@ -103,8 +118,67 @@ ON CREATE SET
   t.payment_currency = r.payment_currency,
   t.amount_received = r.amount_received,
   t.receiving_currency = r.receiving_currency,
-  t.payment_format = r.payment_format,
-  t.source_row_number = r.source_row_number
+  t.payment_format = r.payment_format"""
+
+# Fresh-load account phase: every distinct account is created exactly once
+# with its final ``last_epoch`` (pre-aggregated client-side), so no MERGE
+# or per-batch update is needed.
+ACCOUNT_CREATE_CYPHER = """UNWIND $accounts AS acc
+CREATE (:Account {account_key: acc.key, bank: acc.bank, account_id: acc.account,
+  last_epoch: acc.last_epoch})
+"""
+
+# Idempotent path (default): safe to re-run on a populated graph.
+TRANSACTION_MERGE_CYPHER = f"""UNWIND $rows AS r
+MATCH (s:Account {{account_key: r.sender_key}})
+MATCH (d:Account {{account_key: r.receiver_key}})
+MERGE (t:Transaction {{transaction_id: r.transaction_id}})
+ON CREATE SET
+{_TRANSACTION_SET}
+MERGE (s)-[:SENT]->(t)
+MERGE (t)-[:RECEIVED]->(d)
+"""
+
+# Fresh-load path: the graph is verified empty first, so transactions and
+# edges are created without per-row existence checks. The unique constraint
+# on Transaction.transaction_id still rejects duplicate IDs.
+TRANSACTION_CREATE_CYPHER = """UNWIND $rows AS r
+MATCH (s:Account {account_key: r.sender_key})
+MATCH (d:Account {account_key: r.receiver_key})
+CREATE (s)-[:SENT]->(t:Transaction {
+  transaction_id: r.transaction_id,
+  timestamp: r.timestamp,
+  timestamp_epoch: r.timestamp_epoch,
+  sender_account_key: r.sender_key,
+  receiver_account_key: r.receiver_key,
+  amount_paid: r.amount_paid,
+  payment_currency: r.payment_currency,
+  amount_received: r.amount_received,
+  receiving_currency: r.receiving_currency,
+  payment_format: r.payment_format
+})-[:RECEIVED]->(d)
+"""
+
+#: Self-contained idempotent statement over ``row_to_params`` rows (accounts
+#: and transactions in one query). Kept for callers that load small graphs
+#: directly, such as the API integration test; the CLI uses the faster
+#: two-statement :func:`load_batch` path. Maintains ``Account.last_epoch``.
+BATCH_CYPHER = f"""UNWIND $rows AS r
+MERGE (s:Account {{account_key: r.sender_key}})
+ON CREATE SET s.bank = r.sender_bank, s.account_id = r.sender_account,
+  s.last_epoch = r.timestamp_epoch
+ON MATCH SET s.last_epoch = CASE
+  WHEN s.last_epoch IS NULL OR r.timestamp_epoch > s.last_epoch THEN r.timestamp_epoch
+  ELSE s.last_epoch END
+MERGE (d:Account {{account_key: r.receiver_key}})
+ON CREATE SET d.bank = r.receiver_bank, d.account_id = r.receiver_account,
+  d.last_epoch = r.timestamp_epoch
+ON MATCH SET d.last_epoch = CASE
+  WHEN d.last_epoch IS NULL OR r.timestamp_epoch > d.last_epoch THEN r.timestamp_epoch
+  ELSE d.last_epoch END
+MERGE (t:Transaction {{transaction_id: r.transaction_id}})
+ON CREATE SET
+{_TRANSACTION_SET}
 MERGE (s)-[:SENT]->(t)
 MERGE (t)-[:RECEIVED]->(d)
 """
@@ -163,6 +237,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Stream, validate, and count Parquet batches without connecting to FalkorDB.",
     )
     parser.add_argument(
+        "--mode",
+        choices=LOAD_MODES,
+        default="merge",
+        help=(
+            "'merge' (default) is idempotent and safe to re-run. 'create' is the "
+            "fresh-load fast path: it refuses to run unless the graph has no "
+            "Transaction nodes, then creates transactions and edges without "
+            "existence checks."
+        ),
+    )
+    parser.add_argument(
+        "--window-around",
+        default=None,
+        metavar="TRANSACTION_ID",
+        help=(
+            "Load only rows whose timestamp is within --window-seconds (inclusive) "
+            "of this transaction's timestamp. Reproduces the iteration-1 demo slice "
+            "with hi8-tx-03863669 and 86400 s (998,021 rows)."
+        ),
+    )
+    parser.add_argument("--window-seconds", type=int, default=86_400)
+    parser.add_argument(
         "--skip-schema",
         action="store_true",
         help="Skip index/constraint creation (batches only).",
@@ -174,6 +270,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--limit must be positive")
     if args.timeout_ms <= 0:
         parser.error("--timeout-ms must be positive")
+    if args.window_seconds <= 0:
+        parser.error("--window-seconds must be positive")
     return args
 
 
@@ -255,20 +353,50 @@ def row_to_params(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def find_anchor_timestamp(parquet_path: Path, transaction_id: str) -> datetime:
+    """Return the timestamp of one transaction (projection: ID and time only)."""
+    import pyarrow.compute as pc
+    import pyarrow.dataset as ds
+
+    dataset = ds.dataset(parquet_path, format="parquet")
+    table = dataset.to_table(
+        columns=["transaction_id", "timestamp"],
+        filter=pc.field("transaction_id") == transaction_id,
+    )
+    if table.num_rows != 1:
+        raise ValueError(f"window anchor not found exactly once: {transaction_id}")
+    value = table.column("timestamp")[0].as_py()
+    if not isinstance(value, datetime):  # pragma: no cover - schema types timestamp[us]
+        raise TypeError("window anchor timestamp is not a datetime")
+    return value
+
+
 def iter_param_batches(
-    parquet_path: Path, *, batch_size: int, limit: int | None
+    parquet_path: Path,
+    *,
+    batch_size: int,
+    limit: int | None,
+    window: tuple[datetime, datetime] | None = None,
 ) -> Any:
     """Yield validated ``UNWIND $rows`` parameter batches in file order.
 
     Streams via ``ParquetFile.iter_batches`` with the :data:`LOAD_COLUMNS`
     projection, so memory stays bounded by one batch. ``limit`` truncates to
-    a file-order prefix. Yields ``(batch, rows_in_batch)`` tuples.
+    a file-order prefix. ``window`` keeps only rows whose timestamp lies in
+    the inclusive ``[start, end]`` range (applied before ``limit``).
     """
+    import pyarrow.compute as pc
     import pyarrow.parquet as pq
 
     parquet_file = pq.ParquetFile(parquet_path)
     remaining = limit
     for record_batch in parquet_file.iter_batches(batch_size=batch_size, columns=list(LOAD_COLUMNS)):
+        if window is not None:
+            timestamps = record_batch.column(record_batch.schema.get_field_index("timestamp"))
+            start = pa_scalar_like(window[0], timestamps.type)
+            end = pa_scalar_like(window[1], timestamps.type)
+            mask = pc.and_(pc.greater_equal(timestamps, start), pc.less_equal(timestamps, end))
+            record_batch = record_batch.filter(mask)
         table = record_batch.to_pylist()
         if remaining is not None:
             table = table[:remaining]
@@ -280,6 +408,13 @@ def iter_param_batches(
             break
 
 
+def pa_scalar_like(value: datetime, arrow_type: Any) -> Any:
+    """Build an Arrow scalar of ``arrow_type`` for timestamp comparisons."""
+    import pyarrow as pa
+
+    return pa.scalar(value, type=arrow_type)
+
+
 def ensure_schema(graph: Any) -> dict[str, str]:
     """Create range indexes before unique constraints (supported order).
 
@@ -288,22 +423,16 @@ def ensure_schema(graph: Any) -> dict[str, str]:
     already-existing indexes/constraints are reported, not fatal.
     """
     status: dict[str, str] = {}
+    # Only the two lookup keys are indexed. Transaction.timestamp and
+    # Transaction.timestamp_epoch range indexes are intentionally absent:
+    # no approved query anchors on time, and their presence let the planner
+    # choose a window-wide timestamp scan over the indexed account anchor.
     steps = [
         ("index:Account(account_key)", graph.create_node_range_index, ("Account", "account_key")),
         (
             "index:Transaction(transaction_id)",
             graph.create_node_range_index,
             ("Transaction", "transaction_id"),
-        ),
-        (
-            "index:Transaction(timestamp)",
-            graph.create_node_range_index,
-            ("Transaction", "timestamp"),
-        ),
-        (
-            "index:Transaction(timestamp_epoch)",
-            graph.create_node_range_index,
-            ("Transaction", "timestamp_epoch"),
         ),
         (
             "unique:Account(account_key)",
@@ -331,6 +460,136 @@ def ensure_schema(graph: Any) -> dict[str, str]:
             else:
                 status[name] = f"warning: {type(exc).__name__}"
     return status
+
+
+def split_batch(params: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split validated row params into de-duplicated accounts and transaction rows.
+
+    Each account appears once per batch with the maximum epoch it takes part
+    in (as sender or receiver). Transaction rows keep only the stored
+    allowlisted fields plus the two account keys used for matching.
+    """
+    accounts: dict[str, dict[str, Any]] = {}
+    rows: list[dict[str, Any]] = []
+    for row in params:
+        epoch = row["timestamp_epoch"]
+        for side in ("sender", "receiver"):
+            key = row[f"{side}_key"]
+            entry = accounts.get(key)
+            if entry is None:
+                accounts[key] = {
+                    "key": key,
+                    "bank": row[f"{side}_bank"],
+                    "account": row[f"{side}_account"],
+                    "last_epoch": epoch,
+                }
+            elif epoch > entry["last_epoch"]:
+                entry["last_epoch"] = epoch
+        rows.append(
+            {
+                "transaction_id": row["transaction_id"],
+                "timestamp": row["timestamp"],
+                "timestamp_epoch": epoch,
+                "sender_key": row["sender_key"],
+                "receiver_key": row["receiver_key"],
+                "amount_paid": row["amount_paid"],
+                "payment_currency": row["payment_currency"],
+                "amount_received": row["amount_received"],
+                "receiving_currency": row["receiving_currency"],
+                "payment_format": row["payment_format"],
+            }
+        )
+    return list(accounts.values()), rows
+
+
+def aggregate_accounts(
+    parquet_path: Path,
+    *,
+    limit: int | None,
+    window: tuple[datetime, datetime] | None,
+) -> list[dict[str, Any]]:
+    """Return every distinct account in scope with its maximum epoch.
+
+    Vectorized (Arrow group-by) over only the account and timestamp columns,
+    with the same window/limit scoping as :func:`iter_param_batches`. Naive
+    timestamps are interpreted as UTC, matching :func:`row_to_params`.
+    """
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    import pyarrow.parquet as pq
+
+    columns = [
+        "timestamp", "sender_bank", "sender_account", "sender_account_key",
+        "receiver_bank", "receiver_account", "receiver_account_key",
+    ]
+    table = pq.read_table(parquet_path, columns=columns)
+    if window is not None:
+        ts = table.column("timestamp")
+        mask = pc.and_(
+            pc.greater_equal(ts, pa_scalar_like(window[0], ts.type)),
+            pc.less_equal(ts, pa_scalar_like(window[1], ts.type)),
+        )
+        table = table.filter(mask)
+    if limit is not None:
+        table = table.slice(0, limit)
+    epoch = pc.divide(
+        pc.cast(pc.cast(table.column("timestamp"), pa.timestamp("us")), pa.int64()), 1_000_000
+    )
+    parts = []
+    for side in ("sender", "receiver"):
+        parts.append(
+            pa.table(
+                {
+                    "key": table.column(f"{side}_account_key"),
+                    "bank": table.column(f"{side}_bank"),
+                    "account": table.column(f"{side}_account"),
+                    "epoch": epoch,
+                }
+            )
+        )
+    combined = pa.concat_tables(parts)
+    grouped = combined.group_by("key").aggregate(
+        [("bank", "min"), ("account", "min"), ("epoch", "max")]
+    )
+    return [
+        {"key": key, "bank": bank, "account": account, "last_epoch": int(last)}
+        for key, bank, account, last in zip(
+            grouped.column("key").to_pylist(),
+            grouped.column("bank_min").to_pylist(),
+            grouped.column("account_min").to_pylist(),
+            grouped.column("epoch_max").to_pylist(),
+        )
+    ]
+
+
+def create_accounts(
+    graph: Any, accounts: list[dict[str, Any]], *, batch_size: int, timeout_ms: int
+) -> int:
+    """Create pre-aggregated accounts in batches; return the batch count."""
+    batches = 0
+    for start in range(0, len(accounts), batch_size):
+        graph.query(
+            ACCOUNT_CREATE_CYPHER,
+            params={"accounts": accounts[start:start + batch_size]},
+            timeout=timeout_ms,
+        )
+        batches += 1
+    return batches
+
+
+def load_batch(graph: Any, params: list[dict[str, Any]], *, mode: str, timeout_ms: int) -> None:
+    """Load one batch.
+
+    ``merge``: upsert the batch's de-duplicated accounts, then MERGE its
+    transactions. ``create``: accounts already exist (created up front by
+    :func:`create_accounts`), so only CREATE the transactions and edges.
+    """
+    accounts, rows = split_batch(params)
+    if mode == "create":
+        graph.query(TRANSACTION_CREATE_CYPHER, params={"rows": rows}, timeout=timeout_ms)
+        return
+    graph.query(ACCOUNT_UPSERT_CYPHER, params={"accounts": accounts}, timeout=timeout_ms)
+    graph.query(TRANSACTION_MERGE_CYPHER, params={"rows": rows}, timeout=timeout_ms)
 
 
 def scalar_count(graph: Any, cypher: str, *, timeout_ms: int) -> int:
@@ -432,20 +691,50 @@ def main(argv: list[str] | None = None) -> int:
     stats = LoaderStats()
     schema_status: dict[str, str] = {"mode": "dry-run"} if args.dry_run else {}
 
+    window_info: dict[str, Any] | None = None
+    account_phase: dict[str, Any] | None = None
     try:
+        window: tuple[datetime, datetime] | None = None
+        if args.window_around is not None:
+            center = find_anchor_timestamp(args.parquet, args.window_around)
+            delta = timedelta(seconds=args.window_seconds)
+            window = (center - delta, center + delta)
+            window_info = {
+                "anchor_transaction_id": args.window_around,
+                "window_seconds": args.window_seconds,
+                "rule": "anchor timestamp +/- window_seconds, inclusive",
+            }
         graph = None
         if not args.dry_run:
             graph = connect(args.host, args.port, args.graph_name)
+            if args.mode == "create":
+                existing = scalar_count(graph, COUNT_TRANSACTIONS_CYPHER, timeout_ms=args.timeout_ms)
+                if existing:
+                    raise ValueError(
+                        f"--mode create requires an empty graph ({existing} transactions present); "
+                        "use --mode merge for idempotent re-runs"
+                    )
             if not args.skip_schema:
                 schema_status = ensure_schema(graph)
             else:
                 schema_status = {"mode": "schema-skipped"}
+            if args.mode == "create":
+                phase_started = time.perf_counter()
+                accounts = aggregate_accounts(args.parquet, limit=args.limit, window=window)
+                account_batches = create_accounts(
+                    graph, accounts, batch_size=ACCOUNT_BATCH_SIZE, timeout_ms=args.timeout_ms
+                )
+                account_phase = {
+                    "accounts": len(accounts),
+                    "batches": account_batches,
+                    "seconds": round(time.perf_counter() - phase_started, 3),
+                }
 
         for params in iter_param_batches(
-            args.parquet, batch_size=args.batch_size, limit=args.limit
+            args.parquet, batch_size=args.batch_size, limit=args.limit, window=window
         ):
             if graph is not None:
-                graph.query(BATCH_CYPHER, params={"rows": params}, timeout=args.timeout_ms)
+                load_batch(graph, params, mode=args.mode, timeout_ms=args.timeout_ms)
             stats.rows_attempted += len(params)
             stats.batches_executed += 1
 
@@ -470,6 +759,9 @@ def main(argv: list[str] | None = None) -> int:
                 "elapsed_seconds": round(stats.elapsed_seconds, 3),
                 "peak_rss_mb": round(stats.peak_rss_mb, 1),
                 "limit": args.limit,
+                "mode": args.mode,
+                "window": window_info,
+                "account_phase": account_phase,
                 "dry_run": args.dry_run,
                 "schema": schema_status,
                 "reconciliation": reconciliation,

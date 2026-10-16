@@ -4,6 +4,11 @@
 PARQUET ?= data/processed/hi-small-v8/transactions.parquet
 GRAPH_NAME ?= traceaml-demo
 LIMIT ?=
+DEMO_TX ?= hi8-tx-03863669
+FIXTURE ?= demo-1m
+BENCH_GRAPH ?= $(GRAPH_NAME)
+BENCH_LABEL ?= unspecified
+BENCH_ARGS ?=
 API_APP ?= services/api/src/api/app.py
 API_IMAGE ?= traceaml-api
 GRAPH_FEATURES_OUT ?= data/processed/hi-small-v8/graph-features.parquet
@@ -13,10 +18,10 @@ GRAPH_FEATURES_FALKORDB_OUT ?= data/processed/hi-small-v8/graph-features-falkord
 GRAPH_FEATURES_FALKORDB_MANIFEST ?= data/processed/hi-small-v8/graph-features-falkordb-manifest.json
 GRAPH_ABLATION_DIR ?= artifacts/runs/hi-small-v8/graph-ablation
 SYNTH_PARQUET ?= data/interim/synthetic/hi-small-shape.parquet
-BENCH_RUN_ROOT ?= artifacts/runs/hi-small-v8
-BENCH_SLICE ?= data/interim/bench/demo-slice.parquet
-BENCH_GRAPH ?= agentbench-demo
-BENCH_ARGS ?=
+SUITE_RUN_ROOT ?= artifacts/runs/hi-small-v8
+SUITE_SLICE ?= data/interim/bench/demo-slice.parquet
+SUITE_GRAPH ?= agentbench-demo
+SUITE_ARGS ?=
 
 LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 
@@ -25,7 +30,8 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 .PHONY: help setup env install install-web install-py \
 	up down logs dev-web dev-api api-image \
 	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
-	graph-load graph-load-dry graph-features graph-features-falkordb graph-synth \
+	graph-load graph-load-dry graph-load-demo graph-features graph-features-falkordb graph-synth \
+	graph-fixture graph-bench \
 	test test-ml test-graph test-api test-bench lint lint-web lint-py build check bench bench-quick
 
 help:
@@ -43,7 +49,10 @@ help:
 	@echo   graph-features Build point-in-time graph features (vectorized offline builder)
 	@echo   graph-features-falkordb Cross-check build through FalkorDB (slow; FEATURE_GRAPH)
 	@echo   graph-synth    Write a 5,078,345-row synthetic benchmark Parquet
-	@echo   bench          Run the full latency, capacity, and cost suite (BENCH_ARGS=...)
+	@echo   graph-load-demo Load the two-day demo slice around DEMO_TX into a fresh GRAPH_NAME
+	@echo   graph-fixture  Write the seeded synthetic latency fixture (FIXTURE=demo-1m or full-5m)
+	@echo   graph-bench    Run the warmup + N-sample tool latency benchmark on BENCH_GRAPH
+	@echo   bench          Run the full latency, capacity, and cost suite (SUITE_ARGS=...)
 	@echo   bench-quick    Smoke-run the suite with reduced repeats
 	@echo   test           Run ml, graph, api, and bench tests
 	@echo   lint           Run ESLint and Ruff
@@ -132,6 +141,15 @@ graph-features:
 graph-features-falkordb:
 	uv run --project graph traceaml-build-graph-features --parquet $(PARQUET) --features-out $(GRAPH_FEATURES_FALKORDB_OUT) --manifest-out $(GRAPH_FEATURES_FALKORDB_MANIFEST) --feature-graph $(FEATURE_GRAPH) $(LIMIT_ARG)
 
+graph-load-demo:
+	uv run --project graph traceaml-load-graph --parquet $(PARQUET) --graph-name $(GRAPH_NAME) --mode create --window-around $(DEMO_TX) --window-seconds 86400
+
+graph-fixture:
+	uv run --project graph traceaml-synthetic-fixture --preset $(FIXTURE)
+
+graph-bench:
+	uv run --project graph traceaml-graph-bench --graph-name $(BENCH_GRAPH) --dataset-label "$(BENCH_LABEL)" $(BENCH_ARGS)
+
 graph-synth:
 	uv run --project graph traceaml-synth-transactions --out $(SYNTH_PARQUET) --rows 5078345 --days 18
 
@@ -140,10 +158,10 @@ graph-synth:
 # ---------------------------------------------------------------------------
 
 bench:
-	uv run --project bench traceaml-bench --run-root $(BENCH_RUN_ROOT) --transactions $(PARQUET) --slice-out $(BENCH_SLICE) --graph-name $(BENCH_GRAPH) $(BENCH_ARGS)
+	uv run --project bench traceaml-bench --run-root $(SUITE_RUN_ROOT) --transactions $(PARQUET) --slice-out $(SUITE_SLICE) --graph-name $(SUITE_GRAPH) $(SUITE_ARGS)
 
 bench-quick:
-	uv run --project bench traceaml-bench --run-root $(BENCH_RUN_ROOT) --transactions $(PARQUET) --slice-out $(BENCH_SLICE) --graph-name $(BENCH_GRAPH) --quick --levels 1,4 --api-workers 1 $(BENCH_ARGS)
+	uv run --project bench traceaml-bench --run-root $(SUITE_RUN_ROOT) --transactions $(PARQUET) --slice-out $(SUITE_SLICE) --graph-name $(SUITE_GRAPH) --quick --levels 1,4 --api-workers 1 $(SUITE_ARGS)
 
 # ---------------------------------------------------------------------------
 # Quality
