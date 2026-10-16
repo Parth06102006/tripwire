@@ -12,6 +12,7 @@ dependencies = [
     "aiosqlite>=0.20",
     "pyarrow>=17.0",
     "traceaml-graph",
+    "google-genai>=2.31.0",
 ]
 
 [tool.uv.sources]

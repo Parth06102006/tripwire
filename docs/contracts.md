@@ -20,11 +20,12 @@ Returns service readiness and dependency status.
 {
   "status": "ok",
   "falkordb": "available",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "llm": "not_configured"
 }
 ```
 
-Allowed status values for dependencies are `available`, `unavailable`, and `not_configured`. Health output contains no credentials or dataset labels.
+Allowed status values for `falkordb` are `available`, `unavailable`, and `not_configured`. `llm` is `configured` when a provider and key are set and `not_configured` otherwise; the check makes no provider request. Health output contains no credentials or dataset labels.
 
 ### `GET /api/alerts`
 
@@ -87,6 +88,14 @@ The score is loaded from the target-free replay artifact. Deterministic policy c
 Duration semantics (changed in Iteration 2): `query_duration_ms` is the wall-clock time of the whole graph evidence phase, which is what the analyst waits for. Before Iteration 2 it was the sum of the serial tool durations. `tool_durations_ms` lists each executed tool's own measured duration in the fixed order above; pattern entries are absent when the anchor transfer was not returned. Under concurrency the per-tool sum can exceed the wall time.
 
 Errors: a transaction absent from the score artifact returns 404 `transaction not scored`; a scored transaction absent from the graph returns 404 `transaction not found in graph`; an unconfigured or unreachable graph returns 503 `graph unavailable`; a missing score or threshold artifact returns 503; a query exceeding its timeout returns 504 `graph query timed out`; malformed graph evidence returns 500 `graph evidence unavailable`, and a report citing unreturned records returns 500 `evidence validation failed`; invalid request bounds return 422. Error bodies carry only these fixed `detail` strings, never hosts, ports, paths, or exception text. Each graph query uses the server-side timeout `TRACEAML_GRAPH_QUERY_TIMEOUT_MS` (default 5000).
+
+### LLM report agent (optional)
+
+`POST /api/investigations` accepts an optional boolean `use_llm` (default `false`). The default path is unchanged: deterministic, fast, and free. With `use_llm: true` and a configured provider (Gemini), a tool-calling agent may select among `trace_funds` and `detect_flow_patterns` (fan_out, fan_in, pass_through) and draft the report. The anchor transaction, time window, result limit, and hop ceiling come from the request; the model supplies only `max_hops` (clamped to the request) or a pattern name. The anchor transfer and its immediate counterparties are always retrieved first with `inspect_counterparties`. Tool calls, model rounds, and wall time are bounded (`LLM_MAX_TOOL_CALLS`, `LLM_MAX_ROUNDS`, `LLM_TIMEOUT_SECONDS`).
+
+The model returns a draft with a hypothesis, supporting and counter-evidence transaction IDs, `cited_claims`, and `cited_paths`. Deterministic code accepts it only if every cited ID exists in the retrieved evidence, every claim's timestamp, amount, currency, and account keys equal the evidenced record, every cited path equals a path a query returned, and identifiers and amount-sized numbers written in the hypothesis come from the evidence. The model never sets `risk_score`, `decision`, or `recommendation`; the recommendation is fixed to `review` by code.
+
+Responses add these optional report fields: `source` (`deterministic` or `llm`), `cited_claims`, `cited_paths`, and `llm`. `llm` records `provider`, `model`, `status` (`completed`, `fallback`, `unavailable`), `fallback_reason`, `rounds`, `tool_calls`, token counts, `duration_ms`, and `estimated_cost_usd` (present only when both per-million-token prices are configured; no price is assumed). `fallback_reason` is one of `not_configured`, `provider_error`, `timeout`, `invalid_output`, `verification_failed`. Any of these returns HTTP 200 with the deterministic report; none produces a raw provider message. FalkorDB failures are not masked and return the same 503/504 as the deterministic path. Prompts, tool results, and keys are never returned or logged. When `use_llm` is true, retrieved synthetic evidence is sent to the provider; the default path sends nothing.
 
 ### Investigation record fields
 

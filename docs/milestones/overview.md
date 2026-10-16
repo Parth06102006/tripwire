@@ -51,7 +51,7 @@ The point-in-time graph feature builder processed all 5,078,345 transactions int
 - [x] Record metric definitions, split, feature set, hardware, serial workload protocol, latency, throughput, and costs that remain unpriced.
 - [x] Provide graph schema and queries and reproducible benchmark instructions (`make bench`, `make graph-bench`; see the Iteration 2 reports).
 - [ ] Provide demo materials (video/walkthrough).
-- [ ] Connect the optional tool-calling LLM report drafter with deterministic fallback and measured cost.
+- [ ] Verify the Gemini report agent live (implemented and unit-tested, ADR-020) and measure its latency and cost with a real key.
 
 ## Ownership
 

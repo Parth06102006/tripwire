@@ -19,6 +19,7 @@ from api.database import CaseDatabase
 from api.dependencies import (
     SettingsDep,
     get_graph_tools,
+    get_llm_session_factory,
     get_score_repository,
     read_benchmarks,
     read_threshold,
@@ -27,6 +28,7 @@ from api.dependencies import (
 from api.exceptions import TransactionNotFoundError, setup_exception_handlers
 from api.graph import SOCKET_TIMEOUT_MARGIN_SECONDS, close_graph_pools, probe_graph
 from api.investigate import GraphTools, build_investigation
+from api.llm import SessionFactory, run_llm_investigation
 from api.scores import (
     ScoreArtifactInvalid,
     ScoreArtifactUnavailable,
@@ -78,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status="ok",
             falkordb=probe_graph(settings.falkordb_host, settings.falkordb_port),
             version=settings.app_version,
+            llm="configured" if settings.llm_configured else "not_configured",
         )
 
     @app.get("/api/alerts", response_model=schemas.AlertsResponse)
@@ -109,11 +112,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
         tools: Annotated[GraphTools, Depends(get_graph_tools)],
+        session_factory: Annotated[SessionFactory, Depends(get_llm_session_factory)],
     ) -> schemas.InvestigationResponse:
         score = repo.score_for(request.transaction_id)
         if score is None:
             raise TransactionNotFoundError()
         threshold = read_threshold(settings)
+        if request.use_llm:
+            return run_llm_investigation(
+                request.transaction_id,
+                score,
+                threshold,
+                tools,
+                max_hops=request.max_hops,
+                time_window_seconds=request.time_window_seconds,
+                result_limit=request.result_limit,
+                settings=settings,
+                session_factory=session_factory,
+                wait_timeout_seconds=investigation_wait_seconds(settings),
+            )
         return build_investigation(
             request.transaction_id,
             score,

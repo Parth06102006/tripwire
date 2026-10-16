@@ -26,6 +26,9 @@ class HealthResponse(StrictModel):
     status: Literal["ok"]
     falkordb: Literal["available", "unavailable", "not_configured"]
     version: str
+    # Whether an LLM provider and key are set. No request is made to the
+    # provider to determine this, so the check is free and never spends tokens.
+    llm: Literal["not_configured", "configured"] = "not_configured"
 
 
 class AlertItem(StrictModel):
@@ -208,6 +211,9 @@ class InvestigationRequest(StrictModel):
     max_hops: int = Field(default=2, ge=1, le=3)
     time_window_seconds: int = Field(default=86400, ge=1, le=2592000)
     result_limit: int = Field(default=50, ge=1, le=100)
+    # Opt in to the LLM report agent. Off by default so the deterministic
+    # path stays fast and free; any LLM failure falls back to that path.
+    use_llm: bool = False
 
 
 class TransactionEvidence(StrictModel):
@@ -271,14 +277,67 @@ class InvestigationEvidence(StrictModel):
     tool_durations_ms: list[ToolDuration] = Field(default_factory=list)
 
 
+LlmFallbackReason = Literal[
+    "not_configured",
+    "provider_error",
+    "timeout",
+    "invalid_output",
+    "verification_failed",
+]
+
+
+class LlmRunInfo(StrictModel):
+    """What the LLM agent did for one request. Never contains prompts or keys."""
+
+    provider: str
+    model: str
+    status: Literal["completed", "fallback", "unavailable"]
+    fallback_reason: LlmFallbackReason | None = None
+    rounds: int = 0
+    tool_calls: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    duration_ms: float = 0.0
+    # Only set when per-million-token prices are configured; never assumed.
+    estimated_cost_usd: float | None = None
+
+
+class CitedClaim(StrictModel):
+    """A factual statement about one retrieved transfer, checked field by field."""
+
+    transaction_id: str
+    timestamp: str | None = None
+    amount_paid: float | None = None
+    payment_currency: str | None = None
+    source_account_key: str | None = None
+    destination_account_key: str | None = None
+
+
+class CitedPath(StrictModel):
+    """A path the report relies on; it must equal a path returned by a query."""
+
+    transaction_ids: list[str]
+    account_keys: list[str]
+
+
 class InvestigationReport(StrictModel):
-    """Deterministic report citing only retrieved evidence."""
+    """Report citing only retrieved evidence.
+
+    ``source`` says who wrote the narrative. The recommendation is fixed to
+    human review by code, never chosen by the model. ``cited_claims`` and
+    ``cited_paths`` are present only for LLM reports and are verified against
+    the retrieved evidence before the report is returned.
+    """
 
     hypothesis: str
     supporting_transaction_ids: list[str]
     counterevidence_ids: list[str]
     recommendation: Literal["review"]
     validation: Literal["validated"]
+    source: Literal["deterministic", "llm"] = "deterministic"
+    cited_claims: list[CitedClaim] = Field(default_factory=list)
+    cited_paths: list[CitedPath] = Field(default_factory=list)
+    llm: LlmRunInfo | None = None
 
 
 class InvestigationResponse(StrictModel):
