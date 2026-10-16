@@ -157,17 +157,17 @@ def _trace_branch(direction: str, depth: int) -> str:
     if direction == "outgoing":
         # (anchor)-[:RECEIVED]->(a0)-[:SENT]->(t1)-[:RECEIVED]->(a1) ...
         segments = "".join(
-            f"-[:RECEIVED]->(a{i - 1}:Account)-[:SENT]->(t{i}:Transaction)"
+            f"-[:RECEIVED]->(a{i - 1})-[:SENT]->(t{i})"
             for i in range(1, depth + 1)
         )
-        pattern = f"(anchor){segments}-[:RECEIVED]->(a{depth}:Account)"
+        pattern = f"(anchor){segments}-[:RECEIVED]->(a{depth})"
     else:  # incoming
         # (anchor)<-[:SENT]-(a0)<-[:RECEIVED]-(t1)<-[:SENT]-(a1) ...
         segments = "".join(
-            f"<-[:SENT]-(a{i - 1}:Account)<-[:RECEIVED]-(t{i}:Transaction)"
+            f"<-[:SENT]-(a{i - 1})<-[:RECEIVED]-(t{i})"
             for i in range(1, depth + 1)
         )
-        pattern = f"(anchor){segments}<-[:SENT]-(a{depth}:Account)"
+        pattern = f"(anchor){segments}<-[:SENT]-(a{depth})"
     epoch_checks = " AND ".join(
         f"t{i}.timestamp_epoch >= lo AND t{i}.timestamp_epoch <= hi"
         for i in range(1, depth + 1)
@@ -233,14 +233,18 @@ LIMIT 1
 # transaction in the window (iteration-1 root cause). Counterparty keys come
 # from the loader-maintained ``sender_account_key``/``receiver_account_key``
 # Transaction properties, which equal the adjacent Account key by
-# construction, so no second expansion per transfer is needed.
+# construction, so no second expansion per transfer is needed. Expanded
+# nodes carry no label check: the loader is the only writer, so every SENT
+# target and RECEIVED source is a Transaction and every other endpoint is an
+# Account (on a high-degree account the label check cost several times the
+# traversal itself).
 
 TRACE_SIBLINGS_BY_TX = """\
 MATCH (anchor:Transaction {transaction_id: $transaction_id})
 MATCH (sender:Account)-[:SENT]->(anchor)
 WITH anchor, sender, anchor.timestamp_epoch - $time_window_seconds AS lo,
   anchor.timestamp_epoch + $time_window_seconds AS hi
-MATCH (sender)-[:SENT]->(t:Transaction)
+MATCH (sender)-[:SENT]->(t)
 WHERE t.transaction_id <> anchor.transaction_id
   AND t.timestamp_epoch >= lo AND t.timestamp_epoch <= hi
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
@@ -277,7 +281,7 @@ LIMIT 1
 TRACE_COUNTERPARTIES_BY_ACCOUNT = """\
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)-[:SENT]->(t:Transaction)
+MATCH (a)-[:SENT]->(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
   a.account_key AS sender_key, t.receiver_account_key AS receiver_key,
@@ -291,7 +295,7 @@ LIMIT $result_limit
 TRACE_COUNTERPARTIES_BY_ACCOUNT_INCOMING = """\
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)<-[:RECEIVED]-(t:Transaction)
+MATCH (a)<-[:RECEIVED]-(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
   t.sender_account_key AS sender_key, a.account_key AS receiver_key,
@@ -323,10 +327,10 @@ RETURN distinct_counterparties, transfers,
 """
 
 TRACE_FAN_OUT = _FAN_TEMPLATE.format(
-    expand="(a)-[:SENT]->(t:Transaction)", counterparty="receiver_account_key"
+    expand="(a)-[:SENT]->(t)", counterparty="receiver_account_key"
 )
 TRACE_FAN_IN = _FAN_TEMPLATE.format(
-    expand="(a)<-[:RECEIVED]-(t:Transaction)", counterparty="sender_account_key"
+    expand="(a)<-[:RECEIVED]-(t)", counterparty="sender_account_key"
 )
 
 # Pass-through runs in three bounded statements plus client-side pairing, so

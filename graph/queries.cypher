@@ -33,7 +33,7 @@
 MATCH (anchor:Transaction {transaction_id: $transaction_id})
 WITH anchor, anchor.timestamp_epoch - $time_window_seconds AS lo,
   anchor.timestamp_epoch + $time_window_seconds AS hi
-MATCH (anchor)-[:RECEIVED]->(a0:Account)-[:SENT]->(t1:Transaction)-[:RECEIVED]->(a1:Account)-[:SENT]->(t2:Transaction)-[:RECEIVED]->(a2:Account)
+MATCH (anchor)-[:RECEIVED]->(a0)-[:SENT]->(t1)-[:RECEIVED]->(a1)-[:SENT]->(t2)-[:RECEIVED]->(a2)
 WHERE t1.timestamp_epoch >= lo AND t1.timestamp_epoch <= hi AND t2.timestamp_epoch >= lo AND t2.timestamp_epoch <= hi
 RETURN anchor.transaction_id AS anchor_id, 2 AS depth,
   t1.transaction_id AS transaction_id_1, t1.timestamp AS timestamp_1, t1.amount_paid AS amount_paid_1, t1.payment_currency AS payment_currency_1, t1.amount_received AS amount_received_1, t1.receiving_currency AS receiving_currency_1, t1.sender_account_key AS sender_account_key_1, t1.receiver_account_key AS receiver_account_key_1,
@@ -58,7 +58,7 @@ MATCH (anchor:Transaction {transaction_id: $transaction_id})
 MATCH (sender:Account)-[:SENT]->(anchor)
 WITH anchor, sender, anchor.timestamp_epoch - $time_window_seconds AS lo,
   anchor.timestamp_epoch + $time_window_seconds AS hi
-MATCH (sender)-[:SENT]->(t:Transaction)
+MATCH (sender)-[:SENT]->(t)
 WHERE t.transaction_id <> anchor.transaction_id
   AND t.timestamp_epoch >= lo AND t.timestamp_epoch <= hi
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
@@ -89,7 +89,7 @@ LIMIT 1
 // -- TRACE_COUNTERPARTIES_BY_ACCOUNT --
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)-[:SENT]->(t:Transaction)
+MATCH (a)-[:SENT]->(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
   a.account_key AS sender_key, t.receiver_account_key AS receiver_key,
@@ -102,7 +102,7 @@ LIMIT $result_limit
 // -- TRACE_COUNTERPARTIES_BY_ACCOUNT_INCOMING --
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)<-[:RECEIVED]-(t:Transaction)
+MATCH (a)<-[:RECEIVED]-(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 RETURN t.transaction_id AS transaction_id, t.timestamp AS timestamp,
   t.sender_account_key AS sender_key, a.account_key AS receiver_key,
@@ -115,7 +115,7 @@ LIMIT $result_limit
 // -- TRACE_FAN_OUT --
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)-[:SENT]->(t:Transaction)
+MATCH (a)-[:SENT]->(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 WITH t ORDER BY t.timestamp_epoch
 WITH count(DISTINCT t.receiver_account_key) AS distinct_counterparties,
@@ -130,7 +130,7 @@ RETURN distinct_counterparties, transfers,
 // -- TRACE_FAN_IN --
 MATCH (a:Account {account_key: $account_key})
 WITH a
-MATCH (a)<-[:RECEIVED]-(t:Transaction)
+MATCH (a)<-[:RECEIVED]-(t)
 WHERE t.timestamp_epoch >= $min_epoch AND t.timestamp_epoch <= $max_epoch
 WITH t ORDER BY t.timestamp_epoch
 WITH count(DISTINCT t.sender_account_key) AS distinct_counterparties,
