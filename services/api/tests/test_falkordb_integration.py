@@ -162,14 +162,6 @@ def test_investigation_against_real_graph(
     assert missing.json() == {"detail": "transaction not found in graph"}
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "graph.queries.TRACE_ACCOUNT_LATEST_EPOCH applies ORDER BY/LIMIT to the last "
-        "UNION branch only, so a sender-only account gets an arbitrary (not latest) "
-        "window end and later fan-out transfers fall outside the window"
-    ),
-)
 def test_fan_out_window_ends_at_latest_activity(tiny_graph: None) -> None:
     from falkordb import FalkorDB
     from graph.queries import detect_flow_patterns
