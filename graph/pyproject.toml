@@ -16,6 +16,8 @@ traceaml-load-graph = "graph.load_graph:main"
 traceaml-build-graph-features = "graph.feature_stream:main"
 traceaml-build-graph-features-batch = "graph.feature_batch:main"
 traceaml-synth-transactions = "graph.synthetic_transactions:main"
+traceaml-synthetic-fixture = "graph.synthetic_fixture:main"
+traceaml-graph-bench = "graph.bench:main"
 
 [dependency-groups]
 dev = [
