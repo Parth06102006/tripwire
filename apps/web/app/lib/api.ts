@@ -119,6 +119,8 @@ export interface PerformanceSummary {
     fan_in: LatencyStats & { matches_min: number; matches_max: number };
     pass_through: LatencyStats & { matches_min: number; matches_max: number };
   };
+  run_id?: string | null;
+  git_commit?: string | null;
   cost: {
     external_llm_calls: number;
     external_llm_cost: string;
@@ -132,6 +134,7 @@ export interface HealthResponse {
   status: "ok";
   falkordb: "available" | "unavailable" | "not_configured";
   version: string;
+  llm?: "configured" | "not_configured";
 }
 
 export interface InvestigationRequest {
@@ -139,6 +142,8 @@ export interface InvestigationRequest {
   max_hops: number;
   time_window_seconds: number;
   result_limit: number;
+  use_llm?: boolean;
+  act?: boolean;
 }
 
 export interface TransactionEvidence {
@@ -170,6 +175,51 @@ export interface InvestigationEvidence {
   accounts: AccountEvidence[];
   paths: GraphPath[];
   query_duration_ms: number;
+  tool_durations_ms?: { tool: string; query_duration_ms: number }[];
+}
+
+export type InvestigationOutcome =
+  | "evidence_found"
+  | "no_matching_path"
+  | "unknown_anchor"
+  | "inconclusive";
+
+export interface ToolTraceEntry {
+  tool_run_id: string;
+  tool: "trace_funds" | "inspect_counterparties" | "detect_flow_patterns";
+  transport: "direct" | "mcp";
+  origin: "policy" | "model";
+  arguments: Record<string, string | number | boolean>;
+  outcome: InvestigationOutcome | "invalid_input";
+  status: "ok" | "error";
+  duration_ms: number;
+  result_count: number;
+  path_count: number;
+  truncated: boolean;
+}
+
+export interface CaseActionResult {
+  proposed_action: "none" | "open_case" | "enrich_case";
+  proposed_by: "agent" | "policy";
+  reason: string;
+  status: "executed" | "denied" | "no_action";
+  denial_code: string | null;
+  case_id: string | null;
+  evidence_refs: string[];
+  tool_run_ids: string[];
+}
+
+export interface LlmRunInfo {
+  provider: string;
+  model: string;
+  status: "completed" | "fallback" | "unavailable";
+  fallback_reason: string | null;
+  rounds: number;
+  tool_calls: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  duration_ms: number;
+  estimated_cost_usd: number | null;
 }
 
 export interface InvestigationReport {
@@ -178,6 +228,10 @@ export interface InvestigationReport {
   counterevidence_ids: string[];
   recommendation: "review";
   validation: "validated";
+  source?: "deterministic" | "llm";
+  llm?: LlmRunInfo | null;
+  proposed_action?: "none" | "open_case" | "enrich_case";
+  action_reason?: string | null;
 }
 
 export interface InvestigationResponse {
@@ -189,6 +243,62 @@ export interface InvestigationResponse {
   evidence: InvestigationEvidence;
   report: InvestigationReport | null;
   created_at: string;
+  outcome?: InvestigationOutcome;
+  tool_trace?: ToolTraceEntry[];
+  action?: CaseActionResult | null;
+}
+
+export type CaseStatus = "suspected" | "under_review" | "confirmed" | "dismissed";
+
+export interface CaseHistoryEntry {
+  review_id: string;
+  action: "open" | "enrich" | "confirm" | "dismiss";
+  reviewer_id: string;
+  pattern_type: string | null;
+  notes: string | null;
+  timestamp: string;
+}
+
+export interface CaseEvidenceEntry {
+  evidence_id: string;
+  review_id: string;
+  action: "open_case" | "enrich_case";
+  proposed_by: "agent" | "policy";
+  investigation_id: string;
+  reason: string;
+  evidence_refs: string[];
+  tool_run_ids: string[];
+  tool_trace: ToolTraceEntry[];
+  risk_score: number;
+  decision: Decision;
+  policy_version: string;
+  timestamp: string;
+}
+
+export interface CaseItem {
+  case_id: string;
+  transaction_id: string;
+  status: CaseStatus;
+  risk_score: number;
+  opened_by: string;
+  created_at: string;
+  updated_at: string;
+  history: CaseHistoryEntry[];
+  evidence: CaseEvidenceEntry[];
+}
+
+export interface CaseListResponse {
+  items: CaseItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CaseReviewRequest {
+  action: "confirm" | "dismiss";
+  reviewer_id: string;
+  pattern_type?: string | null;
+  notes?: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -305,4 +415,91 @@ export async function postInvestigation(
     { method: "POST", body: JSON.stringify(request) },
     isInvestigationResponse,
   );
+}
+
+export function isCaseItem(body: unknown): body is CaseItem {
+  return (
+    isRecord(body) &&
+    typeof body.case_id === "string" &&
+    typeof body.transaction_id === "string" &&
+    typeof body.status === "string" &&
+    Array.isArray(body.history)
+  );
+}
+
+export function isCaseListResponse(body: unknown): body is CaseListResponse {
+  return (
+    isRecord(body) &&
+    Array.isArray(body.items) &&
+    typeof body.total === "number" &&
+    typeof body.limit === "number" &&
+    typeof body.offset === "number"
+  );
+}
+
+export const casesQuery = (status: CaseStatus | null, limit: number, offset = 0) => ({
+  queryKey: ["cases", status, limit, offset] as const,
+  queryFn: () => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (status) params.set("status", status);
+    return fetchJson<CaseListResponse>(
+      `/api/cases?${params.toString()}`,
+      undefined,
+      isCaseListResponse,
+    );
+  },
+});
+
+export const caseQuery = (caseId: string) => ({
+  queryKey: ["case", caseId] as const,
+  queryFn: () =>
+    fetchJson<CaseItem>(`/api/cases/${encodeURIComponent(caseId)}`, undefined, isCaseItem),
+});
+
+export function postCase(request: {
+  transaction_id: string;
+  opened_by: string;
+  notes?: string | null;
+}): Promise<CaseItem> {
+  return fetchJson<CaseItem>(
+    "/api/cases",
+    { method: "POST", body: JSON.stringify(request) },
+    isCaseItem,
+  );
+}
+
+export function postCaseReview(caseId: string, request: CaseReviewRequest): Promise<CaseItem> {
+  return fetchJson<CaseItem>(
+    `/api/cases/${encodeURIComponent(caseId)}/review`,
+    { method: "POST", body: JSON.stringify(request) },
+    isCaseItem,
+  );
+}
+
+export interface ReviewQueueSummary {
+  total: number;
+  reviewCount: number;
+}
+
+/**
+ * Exact count of review-decision alerts without a dedicated endpoint.
+ * The queue is ranked by score and the decision is a score threshold, so
+ * review rows form a prefix; binary-search the boundary with single-row reads.
+ */
+export async function fetchReviewQueueSummary(): Promise<ReviewQueueSummary> {
+  const read = (offset: number) =>
+    fetchJson<AlertsResponse>(`/api/alerts?limit=1&offset=${offset}`, undefined, isAlertsResponse);
+  const first = await read(0);
+  if (first.total === 0 || first.items[0]?.decision !== "review") {
+    return { total: first.total, reviewCount: 0 };
+  }
+  let low = 0;
+  let high = first.total;
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2);
+    const page = await read(mid);
+    if (page.items[0]?.decision === "review") low = mid;
+    else high = mid;
+  }
+  return { total: first.total, reviewCount: high };
 }

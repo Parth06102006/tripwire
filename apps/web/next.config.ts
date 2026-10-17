@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  async redirects() {
+    return [
+      { source: "/investigations", destination: "/simulation", permanent: false },
+    ];
+  },
   async rewrites() {
     const apiOrigin = process.env.TRACEAML_API_ORIGIN ?? "http://127.0.0.1:8000";
     return [

@@ -101,7 +101,7 @@ class GeminiSession:
         if tool_results:
             self._contents.append(
                 types.Content(
-                    role="tool",
+                    role="user",
                     parts=[
                         types.Part.from_function_response(name=r.name, response=r.payload)
                         for r in tool_results

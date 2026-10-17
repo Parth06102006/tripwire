@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,6 +46,9 @@ class LlmReportDraft(BaseModel):
     counterevidence_ids: list[str] = Field(default_factory=list, max_length=25)
     cited_claims: list[schemas.CitedClaim] = Field(default_factory=list, max_length=25)
     cited_paths: list[schemas.CitedPath] = Field(default_factory=list, max_length=10)
+    # A proposal only. The application's action gate decides whether it runs.
+    proposed_action: Literal["none", "open_case", "enrich_case"] = "none"
+    action_reason: str = Field(default="", max_length=400)
 
 
 def report_json_schema() -> dict[str, Any]:
@@ -157,3 +160,5 @@ def verify_draft(
         float(len(builder.paths)),
     }
     _check_prose(draft.hypothesis, builder, allowed_numbers | counts)
+    if draft.action_reason:
+        _check_prose(draft.action_reason, builder, allowed_numbers | counts)

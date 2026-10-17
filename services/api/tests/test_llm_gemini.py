@@ -104,7 +104,7 @@ def test_function_calls_round_trip_through_history(stub: type[StubClient]) -> No
     assert [(c.name, c.args) for c in first.tool_calls] == [("trace_funds", {"max_hops": 2})]
     session.step([ToolResultMessage("trace_funds", {"transactions": []})], deadline=far_deadline())
     contents = stub.last.models.requests[1]["contents"]  # type: ignore[union-attr]
-    assert [c.role for c in contents] == ["user", "model", "tool"]
+    assert [c.role for c in contents] == ["user", "model", "user"]
     assert contents[2].parts[0].function_response.name == "trace_funds"
 
 

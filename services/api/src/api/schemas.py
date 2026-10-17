@@ -214,6 +214,9 @@ class InvestigationRequest(StrictModel):
     # Opt in to the LLM report agent. Off by default so the deterministic
     # path stays fast and free; any LLM failure falls back to that path.
     use_llm: bool = False
+    # Opt in to the controlled case action. The proposal (agent or policy) is
+    # applied only if the deterministic action gate accepts it.
+    act: bool = False
 
 
 class TransactionEvidence(StrictModel):
@@ -277,6 +280,71 @@ class InvestigationEvidence(StrictModel):
     tool_durations_ms: list[ToolDuration] = Field(default_factory=list)
 
 
+InvestigationOutcome = Literal[
+    "evidence_found", "no_matching_path", "unknown_anchor", "inconclusive"
+]
+"""Typed graph result shared by the MCP tools, API and UI.
+
+``no_matching_path`` means the graph was queried successfully and nothing
+matched within the declared bounds. It never means the transaction is safe.
+"""
+
+ToolRunOutcome = Literal[
+    "evidence_found", "no_matching_path", "unknown_anchor", "inconclusive", "invalid_input"
+]
+ToolTransport = Literal["direct", "mcp"]
+ToolOrigin = Literal["policy", "model"]
+TraceArgument = str | int | float | bool
+
+
+class ToolTraceEntry(StrictModel):
+    """One observable graph tool call. Never contains model reasoning."""
+
+    tool_run_id: str
+    tool: Literal["trace_funds", "inspect_counterparties", "detect_flow_patterns"]
+    transport: ToolTransport
+    origin: ToolOrigin
+    arguments: dict[str, TraceArgument]
+    outcome: ToolRunOutcome
+    status: Literal["ok", "error"]
+    duration_ms: float
+    result_count: int
+    path_count: int
+    truncated: bool
+
+
+CaseActionName = Literal["open_case", "enrich_case"]
+ProposedAction = Literal["none", "open_case", "enrich_case"]
+ActionDenialCode = Literal[
+    "anchor_not_scored",
+    "outcome_not_actionable",
+    "decision_not_review",
+    "evidence_refs_missing",
+    "evidence_ref_unverified",
+    "case_already_active",
+    "no_open_case",
+    "duplicate_enrichment",
+]
+
+
+class CaseActionResult(StrictModel):
+    """What the deterministic action gate did with a proposal.
+
+    ``proposed_by`` says who proposed; execution is always decided by code.
+    The action writes to the local case store only. It never changes the
+    score or the policy decision and never touches a payment.
+    """
+
+    proposed_action: ProposedAction
+    proposed_by: Literal["agent", "policy"]
+    reason: str
+    status: Literal["executed", "denied", "no_action"]
+    denial_code: ActionDenialCode | None = None
+    case_id: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    tool_run_ids: list[str] = Field(default_factory=list)
+
+
 LlmFallbackReason = Literal[
     "not_configured",
     "provider_error",
@@ -338,6 +406,9 @@ class InvestigationReport(StrictModel):
     cited_claims: list[CitedClaim] = Field(default_factory=list)
     cited_paths: list[CitedPath] = Field(default_factory=list)
     llm: LlmRunInfo | None = None
+    # The agent's proposal only; the action gate decides whether it runs.
+    proposed_action: ProposedAction = "none"
+    action_reason: str | None = None
 
 
 class InvestigationResponse(StrictModel):
@@ -351,3 +422,6 @@ class InvestigationResponse(StrictModel):
     evidence: InvestigationEvidence
     report: InvestigationReport | None
     created_at: datetime
+    outcome: InvestigationOutcome
+    tool_trace: list[ToolTraceEntry] = Field(default_factory=list)
+    action: CaseActionResult | None = None

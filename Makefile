@@ -66,7 +66,7 @@ help:
 setup: env install
 
 env:
-	uv run --no-project python -c "import os, shutil; os.path.exists('.env') or shutil.copyfile('.env.example', '.env')"
+	@test -f .env || cp .env.example .env
 
 install: install-web install-py
 

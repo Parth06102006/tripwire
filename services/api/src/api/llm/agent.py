@@ -53,6 +53,7 @@ from api.llm.provider import (
 )
 from api.llm.report import LlmReportDraft, report_json_schema, verify_draft
 from api.settings import Settings
+from api.tooltrace import TracedTools, TracingTools, classify_outcome
 from api.verifier import EvidenceValidationError
 
 logger = logging.getLogger("api.llm")
@@ -255,6 +256,8 @@ def run_llm_investigation(
 ) -> schemas.InvestigationResponse:
     """Investigate with the LLM agent, falling back to the deterministic report."""
     decision: Literal["allow", "review"] = "review" if score >= threshold else "allow"
+    traced = tools if isinstance(tools, TracedTools) else TracingTools(tools)
+    tools = traced
     started = time.perf_counter()
     deadline = started + settings.llm_timeout_seconds
     info: dict[str, Any] = {
@@ -291,6 +294,7 @@ def run_llm_investigation(
         result_limit=result_limit,
     )
     context_started = time.perf_counter()
+    traced.origin = "policy"
     try:
         context = tools.inspect_counterparties(
             transaction_id,
@@ -359,7 +363,9 @@ def run_llm_investigation(
                     )
                     continue
                 budget.calls += 1
+                traced.origin = "model"
                 pending.append(ToolResultMessage(call.name, runner.run(call)))
+                traced.origin = "policy"
             if budget.calls_left <= 0:
                 break
 
@@ -396,6 +402,7 @@ def run_llm_investigation(
         return _fallback("provider_error", status="fallback", info=finish_info(), **fallback_args)
 
     run = schemas.LlmRunInfo(status="completed", fallback_reason=None, **finish_info())
+    trace = traced.trace_snapshot()
     return schemas.InvestigationResponse(
         investigation_id=f"inv-{uuid4().hex[:12]}",
         transaction_id=transaction_id,
@@ -419,6 +426,10 @@ def run_llm_investigation(
             cited_claims=draft.cited_claims,
             cited_paths=draft.cited_paths,
             llm=run,
+            proposed_action=draft.proposed_action,
+            action_reason=draft.action_reason or None,
         ),
         created_at=datetime.now(UTC),
+        outcome=classify_outcome(builder.paths, trace),
+        tool_trace=trace,
     )

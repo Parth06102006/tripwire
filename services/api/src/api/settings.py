@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     performance_path: str = Field(default="docs/benchmarks/iteration-2-performance.json")
     score_model: str = Field(default="lgbm")
     case_db_path: str = Field(default="data/cases/cases.db")
+    # How the LLM agent reaches the graph tools. ``mcp`` routes every tool call
+    # through the MCP server boundary; ``direct`` calls the query functions.
+    agent_tool_transport: Literal["mcp", "direct"] = Field(default="mcp")
 
     # Optional investigation report agent. ``LLM_*`` names match .env.example;
     # the TRACEAML_ prefixed forms are accepted too. The provider is off

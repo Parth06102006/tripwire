@@ -35,6 +35,7 @@ from api.exceptions import (
     TraceAMLError,
     TransactionNotFoundError,
 )
+from api.tooltrace import TracedTools, classify_outcome
 from api.verifier import EvidenceValidationError, validate_report
 
 POLICY_VERSION = "v1"
@@ -526,6 +527,7 @@ def build_investigation(
     except EvidenceValidationError as exc:
         raise InvestigationError("evidence validation failed") from exc
 
+    trace = tools.trace_snapshot() if isinstance(tools, TracedTools) else []
     return schemas.InvestigationResponse(
         investigation_id=f"inv-{uuid4().hex[:12]}",
         transaction_id=transaction_id,
@@ -547,4 +549,6 @@ def build_investigation(
             validation="validated",
         ),
         created_at=datetime.now(UTC),
+        outcome=classify_outcome(paths, trace),
+        tool_trace=trace,
     )

@@ -164,3 +164,17 @@ A draft is shown only after deterministic verification: cited IDs exist, structu
 Configuration uses the existing `LLM_PROVIDER`, `LLM_API_KEY`, and `LLM_MODEL` names (also `GEMINI_API_KEY` and `TRACEAML_`-prefixed forms). The key is a Pydantic `SecretStr` read from the git-ignored `.env`, is never logged or returned, and provider error text is discarded. Cost is reported only when both per-million-token prices are configured; none is assumed. The default model alias is `gemini-flash-latest`, configurable because model names change. Retrieved synthetic evidence is sent to Google only on opt-in requests.
 
 Status: unit-tested with a scripted model and an SDK-level stub; not yet exercised against the live Gemini API. A live smoke test is provided and skipped unless a key and `TRACEAML_LIVE_LLM_TEST=1` are set.
+
+## ADR-021: MCP boundary and gated case actions for the agent
+
+**Status:** Accepted
+
+The agent reaches graph tools through an MCP server instead of direct function calls, and its case actions pass a deterministic gate.
+
+MCP: `api.mcp_graph` exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns` as typed, bounded MCP tools. They delegate to the existing parameterized queries (no Cypher is duplicated or generated) and reject out-of-range arguments before any database call. The agent runtime calls them through a real MCP client session (in-memory transport, one per LLM request) behind the existing `GraphTools` seam, so the investigation, verifier, and tests are unchanged. The provider's function calls are mapped onto MCP tool calls; the deterministic path keeps direct calls. `TRACEAML_AGENT_TOOL_TRANSPORT=direct` bypasses the protocol. The same server runs over stdio (`python -m api.mcp_graph`). The `mcp` package is pinned below 2.0 because 2.x renames the server API.
+
+Outcomes and trace: every tool call is recorded (tool, bounded arguments, who chose it, outcome, counts, truncation, duration). Results use `evidence_found`, `no_matching_path`, `unknown_anchor`, or `inconclusive`; a capped result without a path is `inconclusive`, never a clean negative.
+
+Action: the agent proposes `open_case` or `enrich_case` in its draft (with a reason that is verified like the hypothesis); without an LLM, policy makes the same proposal. Code applies it only when evidence was found, the decision is `review` for opening, every evidence reference exists in the returned evidence, and the case state allows it. Writes go to the SQLite case store as append-only evidence with tool-run IDs and a score and decision snapshot, never to FalkorDB. Cases stay `suspected` until an analyst confirms or dismisses them (ADR-006, case memory rule). The action is opt-in per request (`act`).
+
+Status: unit-tested with a scripted model, a fake graph, and a real MCP session. The live tests against FalkorDB (`test_agent_live_graph.py`) skip when it is unreachable and have not been run against a live graph yet.

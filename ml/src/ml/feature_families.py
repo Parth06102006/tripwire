@@ -31,6 +31,13 @@ Families and the state each would need at online serving time:
 - ``cycle``: per-account in-neighbour sets with first-seen times plus an
   ordered-pair existence index (3-cycle closure lookups).
 - ``kyc``: static account registry lookup (entity type, accounts per entity).
+
+``log_received_over_paid`` is defined only when the paid and received amounts
+share one currency and both are strictly positive; it is ``null``/NaN
+otherwise, so raw amounts from different currencies are never compared. The
+``currency_mismatch`` indicator records the mismatched-currency case as a
+separate feature instead. No family sums or compares amounts across
+currencies.
 """
 
 from __future__ import annotations
@@ -188,7 +195,11 @@ def build_txlocal(con: DuckDBPyConnection, tx_view: str, out: str) -> None:
         "(amount_paid >= 1000 AND amount_paid = 1000 * ROUND(amount_paid / 1000))::INTEGER "
         "AS amount_paid_round_1000, "
         "(ROUND(amount_paid * 100) % 100 <> 0)::INTEGER AS amount_paid_has_cents, "
-        "LN(1 + amount_received) - LN(1 + amount_paid) AS log_received_over_paid, "
+        "CASE WHEN payment_currency = receiving_currency "
+        "AND amount_paid IS NOT NULL AND amount_received IS NOT NULL "
+        "AND amount_paid > 0 AND amount_received > 0 "
+        "THEN LN(1 + amount_received) - LN(1 + amount_paid) END "
+        "AS log_received_over_paid, "
         "hour(timestamp)::INTEGER AS hour_of_day "
         f"FROM {tx_view}"
     )
@@ -616,7 +627,20 @@ FAMILIES: dict[str, FamilySpec] = {
             "per-account all-time sent/received counters",
             build_base,
         ),
-        FamilySpec("txlocal", TXLOCAL_COLUMNS, (), "stateless", build_txlocal),
+        FamilySpec(
+            "txlocal",
+            TXLOCAL_COLUMNS,
+            (),
+            "stateless",
+            build_txlocal,
+            notes=[
+                (
+                    "log_received_over_paid is null unless paid and received amounts "
+                    "share one currency and both are strictly positive; currency_mismatch "
+                    "records the mismatched-currency case instead"
+                ),
+            ],
+        ),
         FamilySpec(
             "velocity",
             VELOCITY_COLUMNS,

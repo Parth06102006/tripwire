@@ -38,6 +38,16 @@ APPEND_ONLY_TRIGGERS: tuple[str, ...] = (
     BEGIN SELECT RAISE(ABORT, 'case review history is append-only'); END
     """,
     """
+    CREATE TRIGGER IF NOT EXISTS case_evidence_no_update
+    BEFORE UPDATE ON case_evidence
+    BEGIN SELECT RAISE(ABORT, 'case evidence is append-only'); END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS case_evidence_no_delete
+    BEFORE DELETE ON case_evidence
+    BEGIN SELECT RAISE(ABORT, 'case evidence is append-only'); END
+    """,
+    """
     CREATE TRIGGER IF NOT EXISTS cases_no_delete
     BEFORE DELETE ON cases
     BEGIN SELECT RAISE(ABORT, 'cases are never deleted'); END

@@ -32,6 +32,12 @@ class CaseModel(Base):
         order_by="CaseReviewModel.sequence",
         lazy="selectin",
     )
+    evidence: Mapped[list["CaseEvidenceModel"]] = relationship(
+        "CaseEvidenceModel",
+        back_populates="case",
+        order_by="CaseEvidenceModel.sequence",
+        lazy="selectin",
+    )
 
 
 class CaseReviewModel(Base):
@@ -55,6 +61,36 @@ class CaseReviewModel(Base):
     timestamp: Mapped[str] = mapped_column(String(64), nullable=False, default=now_iso)
 
     case: Mapped[CaseModel] = relationship("CaseModel", back_populates="reviews")
+
+
+class CaseEvidenceModel(Base):
+    """Immutable graph-evidence record attached by an agent or policy action.
+
+    Stores identifier references, tool-run IDs and the tool trace as JSON text.
+    Rows are only inserted; triggers reject updates and deletes.
+    """
+
+    __tablename__ = "case_evidence"
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    evidence_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("cases.case_id"), nullable=False, index=True
+    )
+    review_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    proposed_by: Mapped[str] = mapped_column(String(16), nullable=False)
+    investigation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_refs_json: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_run_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_trace_json: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_score: Mapped[float] = mapped_column(Float, nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    timestamp: Mapped[str] = mapped_column(String(64), nullable=False, default=now_iso)
+
+    case: Mapped[CaseModel] = relationship("CaseModel", back_populates="evidence")
 
 
 Index("ix_cases_status_updated", CaseModel.status, CaseModel.updated_at)

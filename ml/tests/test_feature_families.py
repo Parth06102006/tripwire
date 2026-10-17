@@ -293,6 +293,98 @@ def test_past_rows_change_features(rows: list[Row], family: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Currency semantics of log_received_over_paid
+# ---------------------------------------------------------------------------
+
+
+def txlocal_row(
+    tx_id: str,
+    *,
+    paid: float | None,
+    received: float | None,
+    payment_currency: str,
+    receiving_currency: str,
+) -> Row:
+    return {
+        "transaction_id": tx_id,
+        "timestamp": START,
+        "sender": ACCOUNTS[0],
+        "receiver": ACCOUNTS[1],
+        "amount_paid": paid,
+        "payment_currency": payment_currency,
+        "amount_received": received,
+        "receiving_currency": receiving_currency,
+        "payment_format": "ACH",
+    }
+
+
+def txlocal_value(row: Row, column: str) -> object:
+    index = feature_columns(["txlocal"]).index(column)
+    return compute([row], ["txlocal"])[row["transaction_id"]][index]
+
+
+def test_log_received_over_paid_same_currency() -> None:
+    """Equal currencies and positive amounts give the declared log ratio."""
+    row = txlocal_row(
+        "same",
+        paid=100.0,
+        received=250.0,
+        payment_currency="US Dollar",
+        receiving_currency="US Dollar",
+    )
+    expected = math.log1p(250.0) - math.log1p(100.0)
+    assert txlocal_value(row, "log_received_over_paid") == pytest.approx(expected)
+    assert txlocal_value(row, "currency_mismatch") == 0
+
+
+def test_log_received_over_paid_currency_mismatch_is_null() -> None:
+    """Mismatched currencies never compare raw amounts; the indicator covers it."""
+    row = txlocal_row(
+        "mismatch",
+        paid=100.0,
+        received=250.0,
+        payment_currency="US Dollar",
+        receiving_currency="Euro",
+    )
+    assert txlocal_value(row, "log_received_over_paid") is None
+    assert txlocal_value(row, "currency_mismatch") == 1
+
+
+def test_log_received_over_paid_zero_paid_is_null() -> None:
+    """A zero paid amount is not a valid ratio denominator."""
+    row = txlocal_row(
+        "zero",
+        paid=0.0,
+        received=250.0,
+        payment_currency="US Dollar",
+        receiving_currency="US Dollar",
+    )
+    assert txlocal_value(row, "log_received_over_paid") is None
+
+
+def test_log_received_over_paid_missing_amount_is_null() -> None:
+    """Missing paid or received amounts leave the ratio undefined."""
+    missing_paid = txlocal_row(
+        "no_paid",
+        paid=None,
+        received=250.0,
+        payment_currency="US Dollar",
+        receiving_currency="US Dollar",
+    )
+    missing_received = txlocal_row(
+        "no_received",
+        paid=100.0,
+        received=None,
+        payment_currency="US Dollar",
+        receiving_currency="US Dollar",
+    )
+    table = compute([missing_paid, missing_received], ["txlocal"])
+    index = feature_columns(["txlocal"]).index("log_received_over_paid")
+    assert table["no_paid"][index] is None
+    assert table["no_received"][index] is None
+
+
+# ---------------------------------------------------------------------------
 # Brute-force reference
 # ---------------------------------------------------------------------------
 

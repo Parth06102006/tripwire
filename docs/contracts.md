@@ -44,11 +44,13 @@ Request:
   "transaction_id": "source-transaction-id",
   "max_hops": 2,
   "time_window_seconds": 86400,
-  "result_limit": 50
+  "result_limit": 50,
+  "use_llm": false,
+  "act": false
 }
 ```
 
-`max_hops` is bounded to 1–3. `result_limit` is bounded to 1–100. The server enforces a query timeout independently of these request values.
+`use_llm` and `act` are optional opt-ins (see below). `max_hops` is bounded to 1–3. `result_limit` is bounded to 1–100. The server enforces a query timeout independently of these request values.
 
 Response shape:
 
@@ -97,6 +99,18 @@ The model returns a draft with a hypothesis, supporting and counter-evidence tra
 
 Responses add these optional report fields: `source` (`deterministic` or `llm`), `cited_claims`, `cited_paths`, and `llm`. `llm` records `provider`, `model`, `status` (`completed`, `fallback`, `unavailable`), `fallback_reason`, `rounds`, `tool_calls`, token counts, `duration_ms`, and `estimated_cost_usd` (present only when both per-million-token prices are configured; no price is assumed). `fallback_reason` is one of `not_configured`, `provider_error`, `timeout`, `invalid_output`, `verification_failed`. Any of these returns HTTP 200 with the deterministic report; none produces a raw provider message. FalkorDB failures are not masked and return the same 503/504 as the deterministic path. Prompts, tool results, and keys are never returned or logged. When `use_llm` is true, retrieved synthetic evidence is sent to the provider; the default path sends nothing.
 
+### Typed outcome, tool trace and MCP boundary
+
+Every investigation response adds three fields. `outcome` is one of `evidence_found` (a query returned a path or pattern), `no_matching_path` (the graph was queried successfully and nothing matched within the declared bounds; this is never evidence of safety and never maps to `allow`), `unknown_anchor`, or `inconclusive` (a result hit its cap, or a query did not complete). `unknown_anchor` and unresolved graph failures keep their existing HTTP errors (404, 503, 504), so a response with those outcomes is never returned; the values exist so the MCP tools, the trace, and the UI share one vocabulary. Without paths, any capped tool result makes the outcome `inconclusive` instead of `no_matching_path`.
+
+`tool_trace` lists each graph tool call: `tool_run_id`, `tool` (`trace_funds`, `inspect_counterparties`, `detect_flow_patterns`), `transport` (`direct` or `mcp`), `origin` (`policy` for the deterministic context and fixed calls, `model` for calls the agent selected), `arguments` (bounded scalars; the flow pattern is `flow_pattern`), `outcome` (the outcome values plus `invalid_input`), `status`, `duration_ms`, `result_count`, `path_count`, and `truncated`. It records observable tool facts only, never model reasoning.
+
+The LLM agent (`use_llm: true`) reaches the graph tools through an MCP server (`api.mcp_graph`) and an in-process MCP client session when `TRACEAML_AGENT_TOOL_TRANSPORT=mcp` (the default). The server exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`, delegates to the existing parameterized queries in `graph.queries`, and rejects out-of-range arguments before any database call. `TRACEAML_AGENT_TOOL_TRANSPORT=direct` calls the same functions without the protocol. The deterministic path always uses direct calls. `python -m api.mcp_graph` serves the same tools over stdio for external MCP clients.
+
+### Controlled case action
+
+`POST /api/investigations` accepts an optional boolean `act` (default `false`). When set, the response adds `action` after a deterministic gate. The proposal comes from the agent (`proposed_action` and `action_reason` on an LLM report) or, for a deterministic report, from policy: `open_case` for a `review` decision with `evidence_found`, `enrich_case` when an open case already exists. The gate allows a proposal only when: `outcome` is `evidence_found`; opening requires the policy decision `review`; evidence references are present and each exists in the evidence returned by the tool runs of this investigation; and the case state allows it (`case_already_active`, `no_open_case`, and `duplicate_enrichment` are denials). `action` carries `proposed_action`, `proposed_by` (`agent` or `policy`), `reason`, `status` (`executed`, `denied`, `no_action`), `denial_code`, `case_id`, `evidence_refs`, and `tool_run_ids`. The action writes only to the local case store. It cannot change `risk_score` or `decision`, writes nothing to FalkorDB, and does not block, freeze, or move money.
+
 ### Investigation record fields
 
 `TransactionEvidence` contains `transaction_id`, `timestamp`, `source_account_key`, `destination_account_key`, sent/received amount and currency when present, and payment type when present. `GraphPath` contains ordered account and transaction references. `InvestigationReport` contains a hypothesis, supporting transaction IDs, counterevidence IDs, a human-review recommendation, and validation status. The report cannot supply risk probabilities or references outside the retrieved evidence set.
@@ -132,7 +146,7 @@ Cases persist in SQLite at `TRACEAML_CASE_DB_PATH` (default `data/cases/cases.db
 
 `POST /api/cases/{case_id}/review` accepts `{"action": "confirm" | "dismiss", "reviewer_id": "...", "pattern_type": null, "notes": null}`. Only explicit analyst action changes status: `confirm` moves the case to `confirmed`, and `dismiss` moves it to `dismissed`. Both are terminal; reviewing a confirmed or dismissed case returns 409 and never overwrites history. A dismissal preserves the transaction history and audit record and does not erase graph data. Nothing is written to the graph yet; provenance-backed case or ring links in the graph remain future work.
 
-Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `opened_by`, `created_at`, `updated_at`, and `history`. Each history entry has `review_id`, `action` (`open`, `confirm`, or `dismiss`), `reviewer_id`, `pattern_type`, `notes`, and `timestamp`, oldest first. `under_review` is accepted as a filter value but no current transition produces it.
+Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `opened_by`, `created_at`, `updated_at`, `history`, and `evidence`. Each `evidence` entry (append-only, from an agent or policy action) has `evidence_id`, `review_id`, `action` (`open_case` or `enrich_case`), `proposed_by`, `investigation_id`, `reason`, `evidence_refs`, `tool_run_ids`, `tool_trace`, the `risk_score`, `decision`, and `policy_version` snapshot, and `timestamp`. It stores identifier references and the tool trace, never transaction records or labels. Cases opened by an action have `opened_by` of `traceaml-agent` or `traceaml-policy` and stay `suspected`; only explicit analyst review confirms or dismisses them. Each history entry has `review_id`, `action` (`open`, `enrich`, `confirm`, or `dismiss`), `reviewer_id`, `pattern_type`, `notes`, and `timestamp`, oldest first. `under_review` is accepted as a filter value but no current transition produces it.
 
 ## Approved graph tools
 

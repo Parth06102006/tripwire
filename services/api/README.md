@@ -58,6 +58,7 @@ All settings use the `TRACEAML_` prefix and may come from the root `.env`.
 | `LLM_PROVIDER` | `none` | `gemini` enables the optional report agent (blank means off) |
 | `LLM_API_KEY` | unset | Gemini API key; also read from `GEMINI_API_KEY`. Keep it in `.env` only |
 | `LLM_MODEL` | `gemini-flash-latest` | Gemini model name or alias |
+| `TRACEAML_AGENT_TOOL_TRANSPORT` | `mcp` | `mcp` routes the LLM agent's graph tool calls through the MCP server; `direct` bypasses it. `python -m api.mcp_graph` serves the tools over stdio |
 | `LLM_TIMEOUT_SECONDS` | `30` | Wall-clock limit for the whole agent run |
 | `LLM_MAX_TOOL_CALLS` / `LLM_MAX_ROUNDS` | `6` / `3` | Tool-call and model-round budgets |
 | `LLM_MAX_OUTPUT_TOKENS` | `1500` | Output cap per model call |

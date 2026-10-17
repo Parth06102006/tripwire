@@ -1,17 +1,19 @@
 {
   "declared_before_test": true,
-  "selection_rule": "Validation only. C1 is the all-family configuration with the highest validation average precision in validation_runs.jsonl. C2 is C1 without the static kyc registry family. C3 is the regularized base-feature model. Each candidate is evaluated on the frozen test cohort exactly once and every evaluation is appended to test_ledger.jsonl.",
+  "selection_rule": "Validation only. C1 is the all-family configuration with the highest validation average precision in validation_runs.jsonl. C2 is C1 without the static kyc registry family. C3 is the regularized base-feature model. Each candidate is evaluated on the frozen test cohort exactly once and every evaluation is appended to test_ledger.jsonl. The test evaluator accepts a candidate only when its name appears here and its grid configuration still hashes to the recorded config_hash; a changed configuration is a new experiment, not an overwrite.",
   "primary": "s1_all_reg_neg100",
   "candidates": [
     {
       "id": "C1",
       "name": "s1_all_reg_neg100",
+      "config_hash": "abbe71e7b0431eb2",
       "role": "primary: all seven families, regularized LightGBM, no negative sampling",
       "validation_average_precision": 0.6088
     },
     {
       "id": "C2",
       "name": "s4_all_no_kyc_neg100",
+      "config_hash": "d6a880b1bf634ce0",
       "role": "robustness: same as C1 without the static account-registry (kyc) family",
       "validation_average_precision": 0.5881,
       "note": "validation value filled in after its stage-4 validation run; the candidate itself was declared in commit 797b1c7 before any test look"
@@ -19,6 +21,7 @@
     {
       "id": "C3",
       "name": "s1_base_reg_neg010",
+      "config_hash": "2a44bdc64b2dabc0",
       "role": "attribution: Iteration 1 features with Iteration 2 regularization and 10% negative sampling",
       "validation_average_precision": 0.2195
     }

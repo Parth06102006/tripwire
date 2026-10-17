@@ -133,6 +133,22 @@ appending every test look to `test_ledger.jsonl`. Real-data leakage audits
 or `../`-relative input and output paths. Method, every run, and results:
 `docs/benchmarks/iteration-2-detection.md`.
 
+Currency semantics: the `txlocal` column `log_received_over_paid` is computed
+only when the paid and received amounts share one currency and both are
+strictly positive; it is null otherwise, so amounts from different currencies
+are never compared. The `currency_mismatch` indicator records the
+mismatched-currency case separately. Every `features-manifest.json` restates
+this as `currency_rule` and carries per-family `notes`.
+
+Test lock: `test` accepts a candidate only when its name is declared in the
+candidate manifest and its grid configuration still hashes to the recorded
+`config_hash`. It refuses to overwrite an existing test artifact or append a
+second ledger row for the same candidate and experiment id; a deliberate
+repeat needs an explicit `--experiment-id`, which writes a separate artifact
+directory and preserves earlier results. Each test config and ledger row
+records the model, test-score, features-manifest and split-manifest hashes
+together. Validation runs stay repeatable.
+
 ## Leakage and semantics tests
 
 Fast tests pin the user-approved seams: target absent from feature

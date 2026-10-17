@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +22,7 @@ from api.cases.repository import CaseRepository
 from api.cases.schemas import (
     OPEN_STATUSES,
     CaseCreateRequest,
+    CaseEvidenceEntry,
     CaseHistoryEntry,
     CaseItem,
     CaseListResponse,
@@ -77,6 +79,26 @@ def to_case_item(model: CaseModel) -> CaseItem:
                     }
                 )
                 for review in model.reviews
+            ],
+            "evidence": [
+                CaseEvidenceEntry.model_validate(
+                    {
+                        "evidence_id": item.evidence_id,
+                        "review_id": item.review_id,
+                        "action": item.action,
+                        "proposed_by": item.proposed_by,
+                        "investigation_id": item.investigation_id,
+                        "reason": item.reason,
+                        "evidence_refs": json.loads(item.evidence_refs_json),
+                        "tool_run_ids": json.loads(item.tool_run_ids_json),
+                        "tool_trace": json.loads(item.tool_trace_json),
+                        "risk_score": item.risk_score,
+                        "decision": item.decision,
+                        "policy_version": item.policy_version,
+                        "timestamp": item.timestamp,
+                    }
+                )
+                for item in model.evidence
             ],
         }
     )

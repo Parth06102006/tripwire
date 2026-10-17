@@ -11,7 +11,10 @@ Subcommands:
   ``validation_runs.jsonl``. Never reads test labels.
 - ``test``: train one pre-declared candidate exactly as in ``validate``, lock
   its validation max-F1 threshold, then evaluate the frozen test cohort once
-  and append the result to ``test_ledger.jsonl``. Every invocation is logged.
+  and append the result to ``test_ledger.jsonl``. The candidate must appear in
+  the declared candidate manifest with a matching config hash, and the runner
+  fails closed rather than overwrite an existing test artifact or append a
+  second ledger row for the same candidate and experiment id.
 - ``publish``: write target-free inference scores (transaction_id,
   timestamp, score) for a tested candidate plus a manifest.
 
@@ -51,6 +54,8 @@ FEATURES_FILENAME = "features.parquet"
 FEATURES_MANIFEST_FILENAME = "features-manifest.json"
 VALIDATION_LEDGER = "validation_runs.jsonl"
 TEST_LEDGER = "test_ledger.jsonl"
+#: Committed manifest of pre-declared test candidates (name plus config hash).
+DEFAULT_CANDIDATES_MANIFEST = "experiments/iteration2_candidates.json"
 
 
 def sql_literal(path: Path) -> str:
@@ -161,6 +166,7 @@ def run_features(args: argparse.Namespace) -> int:
                 "columns": list(FAMILIES[name].columns),
                 "categorical": list(FAMILIES[name].categorical),
                 "serving_state": FAMILIES[name].serving_state,
+                "notes": list(FAMILIES[name].notes),
                 "build_seconds": round(timings.get(name, 0.0), 2),
             }
             for name in families
@@ -178,6 +184,12 @@ def run_features(args: argparse.Namespace) -> int:
         "point_in_time_rule": (
             "features for a transaction at minute t use only rows with timestamp < t; "
             "same-minute rows are simultaneous and invisible; windows are [t - w, t)"
+        ),
+        "currency_rule": (
+            "log_received_over_paid is computed only when payment_currency equals "
+            "receiving_currency and both amounts are strictly positive; it is null "
+            "otherwise, so amounts from different currencies are never compared. "
+            "currency_mismatch is the separate mismatched-currency indicator."
         ),
         "excluded": [
             "target labels",
@@ -240,6 +252,36 @@ def config_hash(config: dict[str, Any]) -> str:
     """Stable short hash of a run configuration."""
     canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def load_candidates_manifest(path: Path) -> dict[str, dict[str, Any]]:
+    """Load the committed candidate manifest keyed by candidate name.
+
+    Every entry must pin ``name`` and a declared ``config_hash``. The test
+    evaluator accepts only candidates present here whose grid configuration
+    still hashes to that value; anything else fails closed.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    by_name: dict[str, dict[str, Any]] = {}
+    for entry in data.get("candidates", []):
+        name = entry.get("name")
+        declared = entry.get("config_hash")
+        if not name or not declared:
+            raise ValueError("candidate manifest entries require name and config_hash")
+        by_name[name] = entry
+    return by_name
+
+
+def _test_ledger_rows(output_dir: Path) -> list[dict[str, Any]]:
+    """Existing test-ledger rows, or an empty list when none are recorded."""
+    path = output_dir / TEST_LEDGER
+    if not path.is_file():
+        return []
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def git_commit() -> str | None:
@@ -733,13 +775,79 @@ def run_test(args: argparse.Namespace) -> int:
 
     from ml.baselines import average_precision, select_threshold_max_f1
 
-    features_path, manifest = _load_manifest(args.features_dir)
     configs: list[dict[str, Any]] = json.loads(args.grid.read_text(encoding="utf-8"))
     matches = [c for c in configs if c["name"] == args.candidate]
     if len(matches) != 1:
         print(json.dumps({"error": f"candidate not found exactly once: {args.candidate}"}))
         return 2
     config = matches[0]
+    try:
+        declared = load_candidates_manifest(args.candidates_manifest)
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"error": f"candidate manifest unreadable: {exc}"}))
+        return 2
+    entry = declared.get(config["name"])
+    if entry is None:
+        print(
+            json.dumps(
+                {
+                    "error": (
+                        f"candidate {config['name']} is not declared in "
+                        f"{args.candidates_manifest}; declare it before evaluating test"
+                    )
+                }
+            )
+        )
+        return 2
+    actual_hash = config_hash(config)
+    if entry["config_hash"] != actual_hash:
+        print(
+            json.dumps(
+                {
+                    "error": (
+                        f"candidate {config['name']} config hash {actual_hash} does not match "
+                        f"declared {entry['config_hash']}; treat this as a new experiment, "
+                        "not an overwrite of the declared candidate"
+                    )
+                }
+            )
+        )
+        return 2
+    experiment_id = args.experiment_id
+    run_name = config["name"] if experiment_id is None else f"{config['name']}__{experiment_id}"
+    run_dir = args.output_dir / "candidates" / run_name
+    duplicate = [
+        row
+        for row in _test_ledger_rows(args.output_dir)
+        if row.get("candidate") == config["name"]
+        and row.get("experiment_id") == experiment_id
+    ]
+    if duplicate:
+        print(
+            json.dumps(
+                {
+                    "error": (
+                        f"test evaluation already recorded for candidate {config['name']} with "
+                        f"experiment_id {experiment_id!r}; pass a new --experiment-id"
+                    )
+                }
+            )
+        )
+        return 2
+    if run_dir.exists():
+        print(
+            json.dumps(
+                {
+                    "error": (
+                        f"test artifacts already exist at {run_dir}; refusing to overwrite "
+                        "an existing result"
+                    )
+                }
+            )
+        )
+        return 2
+
+    features_path, manifest = _load_manifest(args.features_dir)
     try:
         _check_inputs(args, manifest)
         gfeat = _gfeat_meta(args, [config])
@@ -785,9 +893,10 @@ def run_test(args: argparse.Namespace) -> int:
     test_report = split_report(test_scores, test, threshold)
     test_report["by_day"] = day_average_precision(test_scores, test.y, test.day)
 
-    run_dir = args.output_dir / "candidates" / config["name"]
-    run_dir.mkdir(parents=True, exist_ok=True)
-    booster.save_model(str(run_dir / "model.txt"), num_iteration=booster.best_iteration)
+    run_dir.mkdir(parents=True, exist_ok=False)
+    model_path = run_dir / "model.txt"
+    score_path = run_dir / "test_scores.parquet"
+    booster.save_model(str(model_path), num_iteration=booster.best_iteration)
     pq.write_table(
         pa.table(
             {
@@ -796,14 +905,16 @@ def run_test(args: argparse.Namespace) -> int:
                 "score": test_scores,
             }
         ),
-        run_dir / "test_scores.parquet",
+        score_path,
     )
     pq.write_table(val_frame, run_dir / "validation_scores.parquet")
+    features_manifest_sha256 = sha256_of(args.features_dir / FEATURES_MANIFEST_FILENAME)
     run_config = {
         "created_utc": datetime.now(UTC).isoformat(),
         "tool": "ml.experiment test",
         "candidate": config,
         "config_hash": config_hash(config),
+        "experiment_id": experiment_id,
         "feature_columns": columns,
         "categorical_columns": [c for c in columns if c in categorical],
         "category_mappings": {k: v for k, v in mappings.items() if k in columns},
@@ -811,7 +922,9 @@ def run_test(args: argparse.Namespace) -> int:
         "threshold_rule": "max-F1 on validation scores, applied unchanged to test",
         "alert_budget": ALERT_BUDGET,
         "fit": info,
-        "features_manifest_sha256": sha256_of(args.features_dir / FEATURES_MANIFEST_FILENAME),
+        "model_sha256": sha256_of(model_path),
+        "test_scores_sha256": sha256_of(score_path),
+        "features_manifest_sha256": features_manifest_sha256,
         "split_manifest_sha256": manifest["split_manifest_sha256"],
         "prepared_parquet_sha256": manifest["prepared_parquet_sha256"],
         "graph_features": gfeat,
@@ -823,7 +936,13 @@ def run_test(args: argparse.Namespace) -> int:
         "kind": "new candidate test evaluation",
         "candidate": config["name"],
         "config_hash": run_config["config_hash"],
+        "experiment_id": experiment_id,
         "git_commit": run_config["git_commit"],
+        "model_sha256": run_config["model_sha256"],
+        "test_scores_sha256": run_config["test_scores_sha256"],
+        "features_manifest_sha256": run_config["features_manifest_sha256"],
+        "split_manifest_sha256": run_config["split_manifest_sha256"],
+        "prepared_parquet_sha256": run_config["prepared_parquet_sha256"],
         "train_average_precision": train_ap,
         "validation": val_report,
         "test": test_report,
@@ -1181,6 +1300,20 @@ def build_parser() -> argparse.ArgumentParser:
     test = sub.add_parser("test", help="evaluate ONE pre-declared candidate on test")
     _add_fit_args(test)
     test.add_argument("--candidate", required=True)
+    test.add_argument(
+        "--candidates-manifest",
+        type=Path,
+        default=Path(DEFAULT_CANDIDATES_MANIFEST),
+        help="committed manifest of declared candidates (name plus config hash)",
+    )
+    test.add_argument(
+        "--experiment-id",
+        default=None,
+        help=(
+            "explicit id for a deliberate repeat evaluation; writes a separate artifact "
+            "directory and ledger row while preserving earlier results"
+        ),
+    )
 
     rescore = sub.add_parser("rescore", help="re-analyze existing frozen test scores")
     rescore.add_argument("--scores", type=Path, required=True)

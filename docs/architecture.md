@@ -76,12 +76,16 @@ Only explicit analyst confirmation promotes entities into confirmed case memory.
 
 Next.js App Router, TypeScript, Tailwind CSS, and shadcn/ui provide the web application. TanStack Query manages API state, Recharts presents recorded benchmark results, and Cytoscape.js renders graph evidence. The main areas are:
 
-- **Alerts:** ranked transactions, scores, and policy outcomes.
-- **Investigations:** evidence timeline and Cytoscape rendering of query-derived paths.
-- **Benchmarks:** quality at stated alert budgets, latency, throughput, and cost.
-- **System:** service state and replay controls.
+- **Overview (`/`):** review-decision and active-case counts, service health, recent activity, a preview of the latest run's graph, cases needing review, and recent failed runs.
+- **Simulation (`/simulation`):** the pipeline rail (alert, context, tool selection, graph query, evidence, verification, policy gate, outcome), each stage read from a field of the investigation response, with the Cytoscape graph workspace (Explore, Path and All modes), the linked evidence table, and an entity drawer. `/investigations` redirects here.
+- **Cases (`/cases`):** list, selected-case summary, history, graph evidence, and Confirm or Dismiss review.
+- **Alerts (`/alerts`):** the 200 highest-scored alerts with client-side search, decision filter and sort, and an alert drawer with an on-demand graph preview.
+- **Benchmarks (`/benchmarks`):** model metrics at the validation threshold and at the fixed review budget, comparison charts, runtime performance, and cost. Iteration 2 candidates (C1, C2) are not served by the API yet and the page says so.
+- **System (`/system`):** service health from `/api/health` and artifact probes, the recorded latency snapshot, and run history.
 
-The UI communicates that its data is a synthetic replay. It never creates graph facts locally; graph structure is rendered from the API's query-backed response.
+The shell is a persistent sidebar and header (design name: Obsidian Graph Console). Dark is the default theme and light is available; colour is defined once as semantic tokens in `apps/web/app/globals.css`. Statuses are always an icon plus a word.
+
+The UI communicates that its data is a synthetic replay. It never creates graph facts locally; graph structure is rendered from the API's query-backed response. The API does not store runs, failures or events, so Overview and System read a run history kept in this browser (`app/lib/session-runs.ts`) and always label it as such. Recorded mode replays real captured responses (`docs/recorded-runs.md`).
 
 The web client calls the same-origin `/api` path. Next.js rewrites those requests to `TRACEAML_API_ORIGIN` (default `http://127.0.0.1:8000`), avoiding browser CORS configuration for local development. The API and graph loader both use `TRACEAML_GRAPH_NAME`, so the loader must target the same graph configured for the API.
 
