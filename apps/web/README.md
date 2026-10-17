@@ -59,6 +59,23 @@ src/lib/api-client.ts       Typed fetch client and error wording
 src/lib/graph/              Graph model, deterministic layout, React Flow mapping
 ```
 
+## Sticky teaser scroll
+
+`src/components/ui/sticky-teaser-scroll.tsx` is a reusable split-screen section: teasers scroll on one side while one image stays pinned on the other and swaps to the active teaser. The landing page uses it for "How it works" (`src/components/landing/how-it-works.tsx`); `/demo/sticky-teaser` shows it with picsum photos (`?side=left`, `?scrubbed=1`).
+
+It is data-driven: pass `items` (`id`, `title`, `description`, `image`, and optionally `eyebrow`, `href`, `linkLabel`) and nothing else changes when items are added or removed. Pass a stable array, such as a module constant, so the observer is not rebuilt on every render.
+
+| To change                     | Do this                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Swap timing or easing         | Edit `SWAP_DURATION` and `EASE` at the top of the component.                                                             |
+| Where a teaser becomes active | Set `activeOffset` (0 is the top of the viewport, 0.5 the middle, 1 the bottom). The default is 0.5.                     |
+| Image shape                   | Set `aspectClassName`, for example `aspect-square` or `aspect-[3/4]`. The default is `aspect-[4/5]`.                     |
+| Pin below a fixed header      | Set `stickyTop` in pixels. The landing page passes the 72px header height.                                               |
+| Scroll-scrubbed crossfade     | Set `scrubbed`. Opacity and scale then follow each teaser's own scroll progress instead of swapping on the active index. |
+| Image side                    | Set `imageSide` to `"left"` or `"right"`.                                                                                |
+
+Pinning needs the page to be the scroll container, so no ancestor may set `overflow: hidden`, `auto` or `scroll`. Use `overflow-x: clip` to stop sideways scroll. Below 992px the pinning is off and each teaser shows its own image. Step images for the landing page are static files under `public/how-it-works/`.
+
 ## Dependencies
 
 | Package                                                             | Why it is here                                                                                 |

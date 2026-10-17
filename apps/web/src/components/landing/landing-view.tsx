@@ -25,7 +25,7 @@ export default function LandingView() {
   return (
     <div
       data-landing-root
-      className="relative min-h-screen w-full overflow-x-hidden bg-[#0a0b0c] text-ink selection:bg-accent selection:text-accent-ink"
+      className="relative min-h-screen w-full overflow-x-clip bg-[#0a0b0c] text-ink selection:bg-accent selection:text-accent-ink"
     >
       <a
         href="#content"
