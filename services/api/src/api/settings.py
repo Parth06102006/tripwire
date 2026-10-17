@@ -52,14 +52,19 @@ class Settings(BaseSettings):
     baseline_config_path: str = Field(
         default="artifacts/runs/hi-small-v8/baselines/baseline_config.json"
     )
-    baseline_metrics_path: str = Field(
-        default="artifacts/runs/hi-small-v8/baselines/baseline_metrics.json"
-    )
-    graph_metrics_path: str = Field(
-        default="artifacts/runs/hi-small-v8/graph-ablation/baseline_metrics.json"
-    )
+    # Detection results served by /api/benchmarks. The default is the committed
+    # Iteration 2 export (docs/benchmarks/iteration-2-detection.md): the frozen
+    # Iteration 1 baseline and candidates C3, C2 and C1.
+    baseline_metrics_path: str = Field(default="docs/benchmarks/iteration-2-detection.json")
+    # Optional extra models merged in without replacing the entries above, for
+    # example an Iteration 1 graph-ablation run. Unset by default.
+    graph_metrics_path: str | None = Field(default=None)
     performance_path: str = Field(default="docs/benchmarks/iteration-2-performance.json")
     score_model: str = Field(default="lgbm")
+    # Hard-block rule (ADR-023): a score at or above this is a simulated block
+    # the agent cannot reverse. A placeholder chosen without validation labels;
+    # set it from validation precision before relying on it. Blank disables it.
+    block_threshold: float | None = Field(default=0.999, ge=0.0, le=1.0)
     case_db_path: str = Field(default="data/cases/cases.db")
     # How the LLM agent reaches the graph tools. ``mcp`` routes every tool call
     # through the MCP server boundary; ``direct`` calls the query functions.
@@ -136,7 +141,11 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
-        "llm_api_key", "llm_price_input_per_mtok", "llm_price_output_per_mtok", mode="before"
+        "llm_api_key",
+        "llm_price_input_per_mtok",
+        "llm_price_output_per_mtok",
+        "block_threshold",
+        mode="before",
     )
     @classmethod
     def _blank_is_unset(cls, value: object) -> object:

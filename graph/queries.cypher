@@ -180,3 +180,9 @@ RETURN item[0] AS ordinal, t1.sender_account_key AS entry_key,
   t2.amount_received AS amount_received_2, t2.receiving_currency AS receiving_currency_2
 ORDER BY ordinal, transaction_id_2
 LIMIT $result_limit
+
+// -- TRANSACTIONS_PRESENT --
+UNWIND $transaction_ids AS transaction_id
+MATCH (t:Transaction {transaction_id: transaction_id})
+RETURN t.transaction_id AS transaction_id
+LIMIT $result_limit

@@ -354,3 +354,5 @@ Under `artifacts/runs/hi-small-v8/iteration-2-detection/`:
 - `inference_scores.parquet` (`transaction_id`, `timestamp`, `score`; 761,639 rows; no labels), `inference_scores-manifest.json`, and `api_threshold_config.json` (`thresholds.lgbm = 0.474807`)
 
 To switch the replay API to the Iteration 2 model, set `TRACEAML_SCORE_ARTIFACT` to the new `inference_scores.parquet` and `TRACEAML_BASELINE_CONFIG_PATH` to `api_threshold_config.json`. Leave `TRACEAML_SCORE_MODEL=lgbm`.
+
+To serve these results in the API and the performance screen without the local artifacts, run `python -I ml/experiments/export_api_benchmarks.py` from the repository root. It reads the test ledger and the Iteration 1 baseline metrics and writes `docs/benchmarks/iteration-2-detection.json`, the file `GET /api/benchmarks` serves by default.

@@ -171,6 +171,13 @@ def draft(**overrides: Any) -> str:
                 "account_keys": ["1::a", "2::b", "3::c"],
             }
         ],
+        "risk_level": 4,
+        "reasoning": [
+            {
+                "statement": f"{ANCHOR} is forwarded onward by {SECOND} within the window.",
+                "evidence_ids": [ANCHOR, SECOND],
+            }
+        ],
     }
     body.update(overrides)
     return json.dumps(body)
@@ -534,6 +541,13 @@ def test_agent_over_a_real_falkordb_graph(
                 }
             ],
             "cited_paths": [],
+            "risk_level": 4,
+            "reasoning": [
+                {
+                    "statement": "agt-1, agt-2 and agt-3 leave the same sender in a short span.",
+                    "evidence_ids": ["agt-1", "agt-2", "agt-3"],
+                }
+            ],
         }
     )
     session = FakeSession(

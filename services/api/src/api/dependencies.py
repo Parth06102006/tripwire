@@ -9,7 +9,8 @@ regenerated artifact is still picked up.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
@@ -18,6 +19,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import schemas
+from api.cypher_log import recording_provider
 from api.database import CaseDatabase
 from api.exceptions import GraphUnavailableError, ServiceUnavailableError
 from api.graph import GraphUnavailable, get_graph_pool
@@ -30,6 +32,8 @@ from api.scores import (
     load_scores,
 )
 from api.settings import REPOSITORY_ROOT, Settings
+
+logger = logging.getLogger("api")
 
 
 def resolve_path(value: str) -> Path:
@@ -95,7 +99,43 @@ def get_graph_tools(settings: SettingsDep) -> GraphTools:
         )
     except GraphUnavailable as exc:
         raise GraphUnavailableError() from exc
-    return FalkorGraphTools(pool.graph, timeout_ms=settings.graph_query_timeout_ms)
+    # Handles record executed Cypher only while a CypherRecordingTools call
+    # is active on the thread (the streaming endpoint); otherwise it is a no-op.
+    return FalkorGraphTools(
+        recording_provider(pool.graph), timeout_ms=settings.graph_query_timeout_ms
+    )
+
+
+GraphPresence = Callable[[list[str]], "set[str] | None"]
+"""Which of the given transaction IDs exist in the graph; None if unknown."""
+
+
+def get_graph_presence(settings: SettingsDep) -> GraphPresence:
+    """Availability check for the alert queue.
+
+    It never fails the queue: an unreachable or unconfigured graph yields
+    None, which the API reports as ``graph_status: unknown``.
+    """
+
+    def check(transaction_ids: list[str]) -> set[str] | None:
+        try:
+            from graph.queries import transactions_present
+
+            pool = get_graph_pool(
+                settings.falkordb_host,
+                settings.falkordb_port,
+                settings.graph_name,
+                max_connections=settings.graph_pool_size,
+                query_timeout_ms=settings.graph_query_timeout_ms,
+            )
+            return transactions_present(
+                pool.graph(), transaction_ids, timeout_ms=settings.graph_query_timeout_ms
+            )
+        except Exception as exc:  # noqa: BLE001 -- availability is best effort
+            logger.warning("graph availability check failed: %s", type(exc).__name__)
+            return None
+
+    return check
 
 
 def get_llm_session_factory() -> SessionFactory:
@@ -104,13 +144,13 @@ def get_llm_session_factory() -> SessionFactory:
 
 
 def _load_benchmarks(
-    baseline_path: Path, graph_metrics_path: Path, performance_path: Path
+    baseline_path: Path, graph_metrics_path: Path | None, performance_path: Path
 ) -> schemas.BenchmarksResponse:
     # Copy before merging: parsed JSON is shared through the read cache.
     payload: dict[str, Any] = json.loads(json.dumps(read_json_cached(baseline_path)))
     if "models" not in payload:
         payload = {"models": payload}
-    if graph_metrics_path.is_file():
+    if graph_metrics_path is not None and graph_metrics_path.is_file():
         graph_payload = read_json_cached(graph_metrics_path)
         graph_models = graph_payload.get("models", graph_payload)
         if not isinstance(graph_models, dict):
@@ -126,19 +166,25 @@ def _load_benchmarks(
 def _cached_benchmarks(
     baseline: str, graph_metrics: str, performance: str, _mtimes: tuple[int, int, int]
 ) -> schemas.BenchmarksResponse:
-    return _load_benchmarks(Path(baseline), Path(graph_metrics), Path(performance))
+    return _load_benchmarks(
+        Path(baseline), Path(graph_metrics) if graph_metrics else None, Path(performance)
+    )
 
 
 def read_benchmarks(settings: Settings) -> schemas.BenchmarksResponse:
     """Load benchmark metrics (cached per file version) or raise a 503."""
-    paths = (
-        resolve_path(settings.baseline_metrics_path),
-        resolve_path(settings.graph_metrics_path),
-        resolve_path(settings.performance_path),
-    )
+    baseline = resolve_path(settings.baseline_metrics_path)
+    graph = resolve_path(settings.graph_metrics_path) if settings.graph_metrics_path else None
+    performance = resolve_path(settings.performance_path)
     try:
-        mtimes = (_mtime_ns(paths[0]), _mtime_ns(paths[1]), _mtime_ns(paths[2]))
-        return _cached_benchmarks(str(paths[0]), str(paths[1]), str(paths[2]), mtimes)
+        mtimes = (
+            _mtime_ns(baseline),
+            _mtime_ns(graph) if graph else -1,
+            _mtime_ns(performance),
+        )
+        return _cached_benchmarks(
+            str(baseline), str(graph) if graph else "", str(performance), mtimes
+        )
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         raise ServiceUnavailableError("benchmark artifact unavailable") from exc
 

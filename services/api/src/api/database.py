@@ -9,6 +9,7 @@ path can never erase provenance.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from sqlalchemy import text
@@ -84,20 +85,31 @@ class CaseDatabase:
             autoflush=False,
         )
         self._ready = False
+        self._init_lock: asyncio.Lock | None = None
 
     async def initialize(self) -> None:
-        """Create the schema and triggers once per process."""
+        """Create the schema and triggers once per process.
+
+        A fresh store's first page load sends several requests at once; the
+        lock makes exactly one of them run the DDL while the others wait, so
+        none fails with "table already exists".
+        """
         if self._ready:
             return
-        # Importing the models registers their tables on Base.metadata.
-        from api.cases import models  # noqa: F401
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+        async with self._init_lock:
+            if self._ready:
+                return
+            # Importing the models registers their tables on Base.metadata.
+            from api.cases import models  # noqa: F401
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        async with self.engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
-            for statement in APPEND_ONLY_TRIGGERS:
-                await connection.execute(text(statement))
-        self._ready = True
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            async with self.engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+                for statement in APPEND_ONLY_TRIGGERS:
+                    await connection.execute(text(statement))
+            self._ready = True
 
     async def close(self) -> None:
         """Dispose engine resources."""

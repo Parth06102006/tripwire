@@ -253,6 +253,7 @@ class McpGraphTools(TracedTools):
         trace_args: dict[str, schemas.TraceArgument],
     ) -> dict[str, Any]:
         origin = self.origin
+        call_id = self.call_started(tool, origin, trace_args)
         started = time.perf_counter()
         try:
             future = asyncio.run_coroutine_threadsafe(
@@ -265,14 +266,14 @@ class McpGraphTools(TracedTools):
             )
             reply = future.result(timeout=self._call_timeout + 5.0)
         except TimeoutError as exc:
-            self._record_failure(tool, trace_args, origin, started, "inconclusive")
+            self._record_failure(call_id, tool, trace_args, origin, started, "inconclusive")
             raise GraphTimeoutError() from exc
         except Exception as exc:
-            self._record_failure(tool, trace_args, origin, started, "inconclusive")
+            self._record_failure(call_id, tool, trace_args, origin, started, "inconclusive")
             raise InvestigationError() from exc
         if reply.isError:
             # Schema validation rejected the arguments; no graph query ran.
-            self._record_failure(tool, trace_args, origin, started, "invalid_input")
+            self._record_failure(call_id, tool, trace_args, origin, started, "invalid_input")
             raise InvestigationError("tool input rejected")
         envelope = _envelope(reply)
         run_id = str(envelope["tool_run_id"])
@@ -290,23 +291,25 @@ class McpGraphTools(TracedTools):
             path_count=int(envelope["path_count"]),
             truncated=bool(envelope["truncated"]),
         )
-        self.record(entry)
+        result = envelope["result"]
+        self.call_finished(call_id, entry, result if isinstance(result, dict) else None)
         if error_kind is not None:
             raise _error_from_kind(str(error_kind))
-        result = envelope["result"]
         if not isinstance(result, dict):
             raise InvestigationError()
         return result
 
     def _record_failure(
         self,
+        call_id: str,
         tool: Literal["trace_funds", "inspect_counterparties", "detect_flow_patterns"],
         trace_args: dict[str, schemas.TraceArgument],
         origin: schemas.ToolOrigin,
         started: float,
         outcome: schemas.ToolRunOutcome,
     ) -> None:
-        self.record(
+        self.call_finished(
+            call_id,
             schemas.ToolTraceEntry(
                 tool_run_id=new_tool_run_id(),
                 tool=tool,
@@ -319,7 +322,8 @@ class McpGraphTools(TracedTools):
                 result_count=0,
                 path_count=0,
                 truncated=False,
-            )
+            ),
+            None,
         )
 
     def trace_funds(

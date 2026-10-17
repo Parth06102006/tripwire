@@ -72,13 +72,17 @@ hosts, ports, credentials, file paths, exception text, or dataset labels.
 - `GET /api/health` returns `{ "status": "ok", "falkordb": "available", "version": "0.1.0" }`;
   `falkordb` is one of `available`, `unavailable`, `not_configured`.
 - `GET /api/alerts?limit=50&offset=0` returns a risk-ranked replay queue with
-  timestamp and deterministic `allow`/`review` decision.
+  timestamp, deterministic `allow`/`review` decision, and escalation `route`.
 - `GET /api/benchmarks` returns the saved model metrics and the recorded
   performance snapshot.
 - `POST /api/investigations` accepts a transaction ID and bounded depth, time
   window, and result limit. It loads the stored risk score, applies the
   validation-selected threshold, runs all approved FalkorDB tools
-  concurrently, and validates the returned evidence references.
+  concurrently, and validates the returned evidence references. The response
+  carries the `escalation` decision (ADR-023).
+- `POST /api/investigations/stream` runs the same investigation and sends
+  server-sent events as each tool call starts and finishes, with the executed
+  Cypher and the evidence it returned, then the full response.
 - `GET /api/cases`, `POST /api/cases`, `GET /api/cases/{case_id}`, and
   `POST /api/cases/{case_id}/review` manage analyst cases with an append-only
   review history.

@@ -390,6 +390,17 @@ ORDER BY ordinal, transaction_id_2
 LIMIT $result_limit
 """
 
+# Which of a page of transaction IDs exist in the graph (the alert queue's
+# availability check). One indexed lookup per ID; the row bound equals the
+# number of IDs sent.
+TRANSACTIONS_PRESENT = """\
+UNWIND $transaction_ids AS transaction_id
+MATCH (t:Transaction {transaction_id: transaction_id})
+RETURN t.transaction_id AS transaction_id
+LIMIT $result_limit
+"""
+MAX_PRESENCE_IDS = 200
+
 #: Every executable statement in this module, for allowlist/bound assertions.
 ALL_QUERIES: tuple[str, ...] = (
     TRACE_COUNTERPARTIES_BY_TX,
@@ -403,6 +414,7 @@ ALL_QUERIES: tuple[str, ...] = (
     TRACE_PASS_THROUGH_OUT_HISTOGRAM,
     TRACE_PASS_THROUGH_FIRST_INCOMING,
     TRACE_PASS_THROUGH_DETAIL,
+    TRANSACTIONS_PRESENT,
 )
 
 
@@ -900,3 +912,26 @@ def detect_flow_patterns(
         "matches": matches,
         "query_duration_ms": (time.perf_counter() - started) * 1000.0,
     }
+
+
+def transactions_present(
+    graph: Any,
+    transaction_ids: list[str],
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+) -> set[str]:
+    """Return the subset of ``transaction_ids`` that exist as Transaction nodes.
+
+    Bounded to ``MAX_PRESENCE_IDS`` IDs per call. An empty list makes no query.
+    """
+    ids = [validate_transaction_id(value) for value in transaction_ids]
+    if len(ids) > MAX_PRESENCE_IDS:
+        raise ValueError(f"at most {MAX_PRESENCE_IDS} transaction IDs per presence check")
+    if not ids:
+        return set()
+    result = _timed_query(
+        graph,
+        TRANSACTIONS_PRESENT,
+        {"transaction_ids": ids, "result_limit": len(ids)},
+        validate_timeout(timeout_ms),
+    )
+    return {str(row[0]) for row in result.result_set}

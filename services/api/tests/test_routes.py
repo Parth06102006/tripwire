@@ -192,6 +192,25 @@ def test_benchmarks_reads_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert_no_labels(response.json())
 
 
+def test_benchmarks_default_serves_iteration_2_detection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no override, the committed Iteration 2 export is served as recorded."""
+    monkeypatch.delenv("TRACEAML_BASELINE_METRICS_PATH", raising=False)
+    monkeypatch.setenv("TRACEAML_GRAPH_METRICS_PATH", "")
+    with make_client() as client:
+        response = client.get("/api/benchmarks")
+    assert response.status_code == 200
+    models = response.json()["models"]
+    assert list(models) == ["iteration1_lgbm", "c3", "c2", "c1"]
+    selected = models["c1"]
+    assert selected["average_precision"]["test"] == pytest.approx(0.7525, abs=5e-5)
+    assert selected["average_precision"]["test_bulk_sept_9_10"] == pytest.approx(0.5996, abs=5e-5)
+    assert selected["test_at_alert_budget"]["true_positives"] == 745
+    assert models["iteration1_lgbm"]["average_precision"]["test"] == pytest.approx(0.1587, abs=5e-5)
+    assert_no_labels(response.json())
+
+
 def test_benchmarks_merges_graph_ablation_when_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

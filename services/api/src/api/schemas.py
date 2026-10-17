@@ -31,6 +31,15 @@ class HealthResponse(StrictModel):
     llm: Literal["not_configured", "configured"] = "not_configured"
 
 
+ModelRoute = Literal["blocked_by_rule", "flagged_for_review", "standard_path"]
+"""Where the traditional model and rules send a transaction (ADR-023).
+
+``blocked_by_rule``: score at or above the hard-block threshold, a simulated
+block the agent cannot reverse. ``flagged_for_review``: score at or above the
+review threshold; the agent review decides. ``standard_path``: allowed.
+"""
+
+
 class AlertItem(StrictModel):
     """One scored transaction with its deterministic policy decision."""
 
@@ -38,15 +47,31 @@ class AlertItem(StrictModel):
     timestamp: str
     score: float
     decision: Literal["allow", "review"]
+    route: ModelRoute = "standard_path"
+    # Whether the transaction exists in the configured graph, so it can be
+    # investigated. ``unknown`` when the graph could not be asked.
+    graph_status: Literal["available", "missing", "unknown"] = "unknown"
+
+
+class RouteCounts(StrictModel):
+    """Matching alerts per route under every filter except the route selection."""
+
+    blocked_by_rule: int = 0
+    flagged_for_review: int = 0
+    standard_path: int = 0
 
 
 class AlertsResponse(StrictModel):
     """Paged alert queue over the target-free score artifact."""
 
     items: list[AlertItem]
+    # Alerts matching the filters; every scored transaction when none are set.
     total: int
     limit: int
     offset: int
+    # All scored transactions, whatever the filters.
+    scored_total: int
+    route_counts: RouteCounts
 
 
 class SplitMetrics(StrictModel):
@@ -388,6 +413,18 @@ class CitedPath(StrictModel):
     account_keys: list[str]
 
 
+class ReasoningPoint(StrictModel):
+    """One step of the agent's stated reasoning, citing returned evidence.
+
+    Statements are verified like the hypothesis: identifiers and amount-sized
+    numbers must come from the evidence, and every cited ID must be a
+    returned transaction.
+    """
+
+    statement: str = Field(min_length=1, max_length=400)
+    evidence_ids: list[str] = Field(min_length=1, max_length=10)
+
+
 class InvestigationReport(StrictModel):
     """Report citing only retrieved evidence.
 
@@ -409,6 +446,31 @@ class InvestigationReport(StrictModel):
     # The agent's proposal only; the action gate decides whether it runs.
     proposed_action: ProposedAction = "none"
     action_reason: str | None = None
+    # The agent's proposed risk level (1 benign to 5 strong indicators) and the
+    # reasoning behind it. Present only on verified LLM reports; policy, not
+    # the model, maps the level to a decision.
+    risk_level: int | None = Field(default=None, ge=1, le=5)
+    reasoning: list[ReasoningPoint] = Field(default_factory=list)
+
+
+EscalationOutcome = Literal["block", "allow", "pending_review"]
+
+
+class EscalationDecision(StrictModel):
+    """Deterministic escalation over the model route and the agent's rating.
+
+    Every block is simulated: nothing is sent to a payment system.
+    """
+
+    route: ModelRoute
+    review_threshold: float
+    block_threshold: float | None
+    agent_status: Literal["rated", "unavailable", "not_applicable"]
+    risk_level: int | None = Field(default=None, ge=1, le=5)
+    outcome: EscalationOutcome
+    decided_by: Literal["rule", "agent", "model"]
+    reason: str
+    simulated: Literal[True] = True
 
 
 class InvestigationResponse(StrictModel):
@@ -425,3 +487,81 @@ class InvestigationResponse(StrictModel):
     outcome: InvestigationOutcome
     tool_trace: list[ToolTraceEntry] = Field(default_factory=list)
     action: CaseActionResult | None = None
+    escalation: EscalationDecision | None = None
+
+
+# Streaming investigation events (POST /api/investigations/stream) ----------
+
+StatementParameter = str | int | float | bool | None | list[str | int | float | bool | None]
+
+
+class ExecutedStatement(StrictModel):
+    """One parameterized Cypher statement a graph tool sent to FalkorDB."""
+
+    cypher: str
+    parameters: dict[str, StatementParameter]
+    rows: int
+    duration_ms: float
+
+
+class EvidenceDelta(StrictModel):
+    """Evidence one tool call returned, shaped through the same allowlists as
+    the final response. Later calls may repeat records; clients merge by ID."""
+
+    transactions: list[TransactionEvidence]
+    accounts: list[AccountEvidence]
+    paths: list[GraphPath]
+
+
+class StreamStarted(StrictModel):
+    """First event: the policy inputs and bounds, before any graph query."""
+
+    transaction_id: str
+    risk_score: float
+    decision: Literal["allow", "review"]
+    route: ModelRoute
+    review_threshold: float
+    block_threshold: float | None
+    policy_version: str
+    max_hops: int
+    time_window_seconds: int
+    result_limit: int
+    agent: Literal["llm", "deterministic"]
+    llm_provider: str | None = None
+    llm_model: str | None = None
+
+
+class StreamToolStarted(StrictModel):
+    """A graph tool call was issued. ``purpose`` is fixed text for policy
+    calls and the agent's verified one-sentence intent for model calls."""
+
+    call_id: str
+    tool: Literal["trace_funds", "inspect_counterparties", "detect_flow_patterns"]
+    origin: ToolOrigin
+    transport: ToolTransport
+    arguments: dict[str, TraceArgument]
+    purpose: str
+
+
+class StreamToolFinished(StrictModel):
+    """A graph tool call ended: its trace entry, executed Cypher and evidence."""
+
+    call_id: str
+    entry: ToolTraceEntry
+    statements: list[ExecutedStatement] = Field(default_factory=list)
+    evidence: EvidenceDelta | None = None
+
+
+class StreamAgentStep(StrictModel):
+    """Progress of the LLM agent between tool calls. Never carries model text."""
+
+    phase: Literal["round_started", "round_finished", "report_started", "report_finished"]
+    round: int
+    tool_calls: int = 0
+
+
+class StreamError(StrictModel):
+    """Terminal error with the same fixed detail the HTTP endpoint would send."""
+
+    status: int
+    detail: str

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from api.scores import ScoreRepository
+
 FORBIDDEN_KEYS = (
     "target_is_laundering",
     "is_laundering",
@@ -47,28 +49,17 @@ def make_evidence(transaction_id: str = "tx_1") -> dict[str, Any]:
     }
 
 
-class FakeScoreRepository:
+class FakeScoreRepository(ScoreRepository):
     """In-memory score lookup standing in for the parquet artifact."""
 
     def __init__(self, scores: dict[str, tuple[float, str]] | None = None) -> None:
-        self._scores = scores or {
-            "tx_1": (0.9, "2022-09-01 00:00"),
-            "tx_2": (0.1, "2022-09-01 00:01"),
-        }
-
-    def score_for(self, transaction_id: str) -> float | None:
-        entry = self._scores.get(transaction_id)
-        return entry[0] if entry is not None else None
-
-    def ranked(self, limit: int, offset: int) -> list[tuple[str, float, str]]:
-        ordered = sorted(self._scores.items(), key=lambda kv: (-kv[1][0], kv[0]))
-        return [
-            (transaction_id, score, timestamp)
-            for transaction_id, (score, timestamp) in ordered[offset : offset + limit]
-        ]
-
-    def __len__(self) -> int:
-        return len(self._scores)
+        super().__init__(
+            scores
+            or {
+                "tx_1": (0.9, "2022-09-01 00:00"),
+                "tx_2": (0.1, "2022-09-01 00:01"),
+            }
+        )
 
 
 class FakeGraphTools:

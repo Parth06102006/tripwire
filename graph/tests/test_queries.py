@@ -375,3 +375,30 @@ def test_trace_duration_covers_anchor_lookup() -> None:
 
     result = queries.trace_funds(SlowAnchor(), "hi8-tx-00000001", max_hops=1)
     assert result["query_duration_ms"] >= 50.0
+
+
+def test_transactions_present_returns_the_existing_subset() -> None:
+    class PresenceGraph:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object] | None, int | None]] = []
+
+        def query(self, cypher, params=None, timeout=None):
+            self.calls.append((cypher, params, timeout))
+            return FakeResult([["hi8-tx-00000001"]])
+
+    graph = PresenceGraph()
+    found = queries.transactions_present(
+        graph, ["hi8-tx-00000001", "hi8-tx-00000002"], timeout_ms=1000
+    )
+    assert found == {"hi8-tx-00000001"}
+    _, params, timeout = graph.calls[0]
+    assert params == {
+        "transaction_ids": ["hi8-tx-00000001", "hi8-tx-00000002"],
+        "result_limit": 2,
+    }
+    assert timeout == 1000
+
+    assert queries.transactions_present(graph, []) == set()
+    assert len(graph.calls) == 1
+    with pytest.raises(ValueError):
+        queries.transactions_present(graph, ["hi8-tx-00000001"] * 201)

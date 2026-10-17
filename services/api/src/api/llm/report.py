@@ -7,7 +7,9 @@ checks, against records returned by executed graph queries only:
 * every structured claim matches the evidenced record field by field;
 * every cited path equals a path a query returned;
 * identifiers written in the prose (transaction IDs, account keys) exist, and
-  amount-sized numbers in the prose match evidenced amounts or counts.
+  amount-sized numbers in the prose match evidenced amounts or counts;
+* every reasoning point cites only returned transactions, and its statement
+  passes the same prose check. The risk level is range-checked; policy maps it.
 
 Any failure raises ``EvidenceValidationError`` and the caller falls back to
 the deterministic report. The recommendation is not part of the draft: code
@@ -49,6 +51,9 @@ class LlmReportDraft(BaseModel):
     # A proposal only. The application's action gate decides whether it runs.
     proposed_action: Literal["none", "open_case", "enrich_case"] = "none"
     action_reason: str = Field(default="", max_length=400)
+    # A proposal only. ``api.policy`` maps a verified level to the decision.
+    risk_level: int = Field(ge=1, le=5)
+    reasoning: list[schemas.ReasoningPoint] = Field(min_length=1, max_length=6)
 
 
 def report_json_schema() -> dict[str, Any]:
@@ -95,6 +100,15 @@ def _check_claim(claim: schemas.CitedClaim, record: schemas.TransactionEvidence)
         or not math.isclose(claim.amount_paid, record.amount_paid, rel_tol=1e-9, abs_tol=1e-9)
     ):
         raise EvidenceValidationError("claim amount does not match evidence")
+
+
+def check_statement(text: str, builder: EvidenceBuilder, allowed_numbers: set[float]) -> None:
+    """Raise unless the identifiers and amount-sized numbers in ``text`` are evidenced.
+
+    Used for every piece of model prose shown to the analyst: the hypothesis,
+    the action reason, reasoning points, and the stated purpose of each call.
+    """
+    _check_prose(text, builder, allowed_numbers)
 
 
 def _check_prose(text: str, builder: EvidenceBuilder, allowed_numbers: set[float]) -> None:
@@ -162,3 +176,8 @@ def verify_draft(
     _check_prose(draft.hypothesis, builder, allowed_numbers | counts)
     if draft.action_reason:
         _check_prose(draft.action_reason, builder, allowed_numbers | counts)
+    for point in draft.reasoning:
+        for transaction_id in point.evidence_ids:
+            if transaction_id not in transaction_ids:
+                raise EvidenceValidationError("reasoning cites a transaction absent from evidence")
+        _check_prose(point.statement, builder, allowed_numbers | counts)

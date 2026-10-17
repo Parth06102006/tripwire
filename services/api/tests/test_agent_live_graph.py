@@ -58,6 +58,13 @@ def final_draft(**overrides: Any) -> str:
         "supporting_transaction_ids": [ANCHOR, FIRST_PATH_TX],
         "proposed_action": "open_case",
         "action_reason": f"Onward transfer {FIRST_PATH_TX} supports analyst review.",
+        "risk_level": 4,
+        "reasoning": [
+            {
+                "statement": f"{ANCHOR} is followed by the onward transfer {FIRST_PATH_TX}.",
+                "evidence_ids": [ANCHOR, FIRST_PATH_TX],
+            }
+        ],
     }
     body.update(overrides)
     return json.dumps(body)

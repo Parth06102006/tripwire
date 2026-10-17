@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from uuid import uuid4
 
 from api import schemas
@@ -74,6 +74,27 @@ def classify_outcome(
     return "no_matching_path"
 
 
+class ToolListener(Protocol):
+    """Observer of tool calls as they start and finish (the streaming endpoint).
+
+    Called from tool worker threads, possibly concurrently.
+    """
+
+    def tool_started(
+        self,
+        call_id: str,
+        tool: ToolName,
+        origin: schemas.ToolOrigin,
+        transport: schemas.ToolTransport,
+        arguments: dict[str, schemas.TraceArgument],
+        purpose: str | None,
+    ) -> None: ...
+
+    def tool_finished(
+        self, call_id: str, entry: schemas.ToolTraceEntry, result: dict[str, Any] | None
+    ) -> None: ...
+
+
 class TracedTools:
     """Base for graph tool sets that record a call trace."""
 
@@ -81,12 +102,38 @@ class TracedTools:
 
     def __init__(self) -> None:
         self.origin: schemas.ToolOrigin = "policy"
+        # The agent's stated intent for the next call, set by the LLM runner
+        # around each model-selected call (calls there are sequential).
+        self.purpose: str | None = None
+        self.listener: ToolListener | None = None
         self._trace: list[schemas.ToolTraceEntry] = []
         self._lock = threading.Lock()
 
     def record(self, entry: schemas.ToolTraceEntry) -> None:
         with self._lock:
             self._trace.append(entry)
+
+    def call_started(
+        self,
+        tool: ToolName,
+        origin: schemas.ToolOrigin,
+        arguments: dict[str, schemas.TraceArgument],
+    ) -> str:
+        """Announce a call to the listener and return its correlation ID."""
+        call_id = f"call-{uuid4().hex[:10]}"
+        if self.listener is not None:
+            self.listener.tool_started(
+                call_id, tool, origin, self.transport, arguments, self.purpose
+            )
+        return call_id
+
+    def call_finished(
+        self, call_id: str, entry: schemas.ToolTraceEntry, result: dict[str, Any] | None
+    ) -> None:
+        """Record the trace entry and tell the listener."""
+        self.record(entry)
+        if self.listener is not None:
+            self.listener.tool_finished(call_id, entry, result)
 
     def trace_snapshot(self) -> list[schemas.ToolTraceEntry]:
         with self._lock:
@@ -118,11 +165,13 @@ class TracingTools(TracedTools):
     ) -> dict[str, Any]:
         run_id = new_tool_run_id()
         origin = self.origin
+        call_id = self.call_started(tool, origin, arguments)
         started = time.perf_counter()
         try:
             result: dict[str, Any] = call()
         except Exception as exc:
-            self.record(
+            self.call_finished(
+                call_id,
                 schemas.ToolTraceEntry(
                     tool_run_id=run_id,
                     tool=tool,
@@ -135,11 +184,13 @@ class TracingTools(TracedTools):
                     result_count=0,
                     path_count=0,
                     truncated=False,
-                )
+                ),
+                None,
             )
             raise
         outcome, count, paths, truncated = summarize_result(tool, result, result_limit)
-        self.record(
+        self.call_finished(
+            call_id,
             schemas.ToolTraceEntry(
                 tool_run_id=run_id,
                 tool=tool,
@@ -152,7 +203,8 @@ class TracingTools(TracedTools):
                 result_count=count,
                 path_count=paths,
                 truncated=truncated,
-            )
+            ),
+            result,
         )
         return result
 

@@ -26,7 +26,7 @@ import json
 import logging
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
@@ -51,7 +51,7 @@ from api.llm.provider import (
     ToolCall,
     ToolResultMessage,
 )
-from api.llm.report import LlmReportDraft, report_json_schema, verify_draft
+from api.llm.report import LlmReportDraft, check_statement, report_json_schema, verify_draft
 from api.settings import Settings
 from api.tooltrace import TracedTools, TracingTools, classify_outcome
 from api.verifier import EvidenceValidationError
@@ -61,6 +61,12 @@ logger = logging.getLogger("api.llm")
 PAYLOAD_MAX_TRANSACTIONS = 40
 PAYLOAD_MAX_PATHS = 30
 CONTEXT_MAX_TRANSACTIONS = 40
+
+AgentPhase = Literal["round_started", "round_finished", "report_started", "report_finished"]
+AgentProgress = Callable[[AgentPhase, int, int], None]
+"""Observer of agent progress: (phase, round number, tool calls in the round).
+
+Carries counts only, never model text."""
 
 
 class _Budget:
@@ -102,16 +108,42 @@ class _ToolRunner:
         self.executed: list[dict[str, Any]] = []
         self.wall_ms = 0.0
 
+    def _verified_purpose(self, args: dict[str, Any]) -> str | None:
+        """The model's stated intent, shown only if it passes the prose check."""
+        text = args.get("purpose")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        text = " ".join(text.split())[:300]
+        try:
+            check_statement(
+                text,
+                self._builder,
+                {float(self._window), float(self._limit), float(self._max_hops)},
+            )
+        except EvidenceValidationError:
+            return None
+        return text
+
     def run(self, call: ToolCall) -> dict[str, Any]:
-        key = (call.name, json.dumps(call.args, sort_keys=True, default=str))
+        # The stated purpose is commentary, not an argument: equal calls with
+        # different wording are still duplicates.
+        args = {k: v for k, v in call.args.items() if k != "purpose"}
+        key = (call.name, json.dumps(args, sort_keys=True, default=str))
         if key in self._cache:
             return {**self._cache[key], "note": "duplicate call; cached result"}
-        if call.name == prompts.TRACE_FUNDS:
-            payload = self._trace(call.args)
-        elif call.name == prompts.DETECT_FLOW_PATTERNS:
-            payload = self._pattern(call.args)
-        else:
-            return {"error": "unknown tool; use only the provided tools"}
+        traced = self._tools if isinstance(self._tools, TracedTools) else None
+        if traced is not None:
+            traced.purpose = self._verified_purpose(call.args)
+        try:
+            if call.name == prompts.TRACE_FUNDS:
+                payload = self._trace(args)
+            elif call.name == prompts.DETECT_FLOW_PATTERNS:
+                payload = self._pattern(args)
+            else:
+                return {"error": "unknown tool; use only the provided tools"}
+        finally:
+            if traced is not None:
+                traced.purpose = None
         if "error" not in payload:
             self._cache[key] = payload
             self.executed.append({"tool": call.name, "args": call.args, "result": payload})
@@ -253,8 +285,14 @@ def run_llm_investigation(
     settings: Settings,
     session_factory: SessionFactory,
     wait_timeout_seconds: float = 60.0,
+    progress: AgentProgress | None = None,
 ) -> schemas.InvestigationResponse:
     """Investigate with the LLM agent, falling back to the deterministic report."""
+
+    def report(phase: AgentPhase, round_number: int, tool_calls: int = 0) -> None:
+        if progress is not None:
+            progress(phase, round_number, tool_calls)
+
     decision: Literal["allow", "review"] = "review" if score >= threshold else "allow"
     traced = tools if isinstance(tools, TracedTools) else TracingTools(tools)
     tools = traced
@@ -349,10 +387,12 @@ def run_llm_investigation(
 
         pending: list[ToolResultMessage] | None = None
         while budget.rounds < budget.max_rounds:
+            report("round_started", budget.rounds + 1)
             turn = session.step(pending, deadline=deadline)
             budget.rounds += 1
             input_tokens += turn.input_tokens or 0
             output_tokens += turn.output_tokens or 0
+            report("round_finished", budget.rounds, len(turn.tool_calls))
             if not turn.tool_calls:
                 break
             pending = []
@@ -376,8 +416,10 @@ def run_llm_investigation(
             + "\n\n"
             + prompts.REPORT_INSTRUCTIONS
         )
+        report("report_started", budget.rounds + 1)
         final = session.final_report(final_prompt, report_json_schema(), deadline=deadline)
         budget.rounds += 1
+        report("report_finished", budget.rounds)
         input_tokens += final.input_tokens or 0
         output_tokens += final.output_tokens or 0
         if not final.text:
@@ -428,6 +470,8 @@ def run_llm_investigation(
             llm=run,
             proposed_action=draft.proposed_action,
             action_reason=draft.action_reason or None,
+            risk_level=draft.risk_level,
+            reasoning=draft.reasoning,
         ),
         created_at=datetime.now(UTC),
         outcome=classify_outcome(builder.paths, trace),

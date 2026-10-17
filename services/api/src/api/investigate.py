@@ -38,7 +38,7 @@ from api.exceptions import (
 from api.tooltrace import TracedTools, classify_outcome
 from api.verifier import EvidenceValidationError, validate_report
 
-POLICY_VERSION = "v1"
+POLICY_VERSION = "v2"
 REVIEW_THRESHOLD_FALLBACK_NOTE = "lgbm"
 
 # Shared worker pool for graph tool calls. Each investigation uses at most
