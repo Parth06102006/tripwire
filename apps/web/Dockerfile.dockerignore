@@ -1,0 +1,13 @@
+# Build context is the repository root; send only what the web image needs.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/web/**
+apps/web/node_modules
+apps/web/.next
+apps/web/test-results
+apps/web/playwright-report
+apps/web/tsconfig.tsbuildinfo
+apps/web/next-env.d.ts
+apps/web/AGENTS.md

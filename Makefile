@@ -32,7 +32,7 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 	data data-inspect data-prepare data-features data-train data-train-graph data-publish \
 	graph-load graph-load-dry graph-load-demo graph-features graph-features-falkordb graph-synth \
 	graph-fixture graph-bench \
-	test test-ml test-graph test-api test-bench lint lint-web lint-py build check bench bench-quick
+	test test-ml test-graph test-api test-bench test-web lint lint-web lint-py build check bench bench-quick
 
 help:
 	@echo TraceAML make targets
@@ -54,7 +54,7 @@ help:
 	@echo   graph-bench    Run the warmup + N-sample tool latency benchmark on BENCH_GRAPH
 	@echo   bench          Run the full latency, capacity, and cost suite (SUITE_ARGS=...)
 	@echo   bench-quick    Smoke-run the suite with reduced repeats
-	@echo   test           Run ml, graph, api, and bench tests
+	@echo   test           Run ml, graph, api, bench, and web unit tests
 	@echo   lint           Run ESLint and Ruff
 	@echo   build          Build the web app for production
 	@echo   check          lint + test + build
@@ -167,7 +167,7 @@ bench-quick:
 # Quality
 # ---------------------------------------------------------------------------
 
-test: test-ml test-graph test-api test-bench
+test: test-ml test-graph test-api test-bench test-web
 
 test-ml:
 	uv run --directory ml pytest -q
@@ -180,6 +180,9 @@ test-api:
 
 test-bench:
 	uv run --directory bench pytest -q
+
+test-web:
+	pnpm test:web
 
 lint: lint-web lint-py
 
