@@ -16,7 +16,7 @@ The repository is named Tripwire. The product is TraceAML: a graph-powered AML d
 
 ## Team ownership
 
-- **Kanishka:** `apps/web/`; frontend, information architecture, Cytoscape interaction, and benchmark presentation.
+- **Kanishka:** `apps/web/`; frontend, information architecture, graph interaction, and benchmark presentation.
 - **Ashwani:** `graph/` and graph ingestion/query implementation; FalkorDB schema, indexes, Cypher, and structural extraction.
 - **Parth:** `services/api/`; FastAPI contracts, replay orchestration, deterministic policy, persistence, and investigation integration.
 - **User, Fraud Intelligence and Evaluation Lead:** `ml/`; data protocol, baselines, graph feature design with Ashwani, benchmark methods, and review of fraud/performance claims. The user also coordinates integration and reviews delegated work.

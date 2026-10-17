@@ -15,6 +15,10 @@ docs/           Product, architecture, API contracts, decisions, and role charte
 compose.yaml    Local FalkorDB service
 ```
 
+## Deployment
+
+To run TraceAML on a server (AWS EC2 step by step, plus ECS, Google Cloud and Azure), see [docs/deployment.md](docs/deployment.md). The production stack is `deploy/compose.prod.yaml`.
+
 ## Requirements
 
 - Node.js 20.9 or newer and pnpm

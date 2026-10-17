@@ -29,11 +29,11 @@ Allowed status values for `falkordb` are `available`, `unavailable`, and `not_co
 
 ### `GET /api/alerts`
 
-Accepts `limit` from 1-200 and a non-negative `offset`. Returns `total`, `limit`, `offset`, and items containing `transaction_id`, `timestamp`, `score`, and deterministic `decision` (`allow` or `review`). Items sort by score descending, then transaction ID ascending. Decisions use the validation-selected LightGBM threshold. The API reads only the target-free `inference_scores.parquet` artifact.
+Accepts `limit` from 1-200 and a non-negative `offset`, plus optional filters that combine with AND: `route` (repeatable: `blocked_by_rule`, `flagged_for_review`, `standard_path`), `min_score` and `max_score` (0 to 1, inclusive), `date_from` and `date_to` (inclusive days, `YYYY-MM-DD`, compared with the queued timestamp), and `q` (up to 64 characters, a case-insensitive substring of the transaction ID). An inverted score or date range is a 422. Filters apply across every scored transaction, not just one page. Returns `total` (the matching alerts; all scored transactions when no filter is set), `scored_total` (all scored transactions), `route_counts` (matches per route under every filter except `route`, so a route selector can show what each choice adds), `limit`, `offset`, and items containing `transaction_id`, `timestamp`, `score`, deterministic `decision` (`allow` or `review`), `route` in the escalation chain (`blocked_by_rule`, `flagged_for_review`, or `standard_path`; see Escalation chain), and `graph_status`: `available` when the transaction exists in the configured graph, `missing` when it does not (it cannot be investigated until the graph holds it), or `unknown` when the graph could not be asked. Availability comes from one bounded, indexed lookup per page (`graph.queries.transactions_present`); a missing or unreachable graph never removes an alert from the queue or fails the request. Items sort by score descending, then transaction ID ascending. Decisions use the validation-selected LightGBM threshold. The API reads only the target-free `inference_scores.parquet` artifact.
 
 ### `GET /api/benchmarks`
 
-Returns the `logreg` and `lgbm` sections from the offline `baseline_metrics.json` artifact under a `models` key. When `TRACEAML_GRAPH_METRICS_PATH` points to an existing graph-ablation run, its model entries (including `lgbm_graph`) are merged into the response. The `performance` object is loaded from `TRACEAML_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
+Returns the Iteration 2 detection results under a `models` key, read from `TRACEAML_BASELINE_METRICS_PATH` (default `docs/benchmarks/iteration-2-detection.json`, exported from the frozen test ledger by `ml/experiments/export_api_benchmarks.py` and matching `docs/benchmarks/iteration-2-detection.md`). The models are `iteration1_lgbm` (the frozen Iteration 1 baseline), `c3`, `c2`, and `c1` (the selected model). Each carries `average_precision` for `train`, `validation`, `test`, and `test_bulk_sept_9_10`, the validation threshold with test precision, recall and F1 at it, the 0.1% alert budget result, and per-split counts including `test_bulk_sept_9_10`. When `TRACEAML_GRAPH_METRICS_PATH` is set to an existing run, its model entries (for example the Iteration 1 `lgbm_graph`) are merged in without replacing these; it is unset by default. The `performance` object is loaded from `TRACEAML_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
 
 ### `POST /api/investigations`
 
@@ -60,7 +60,7 @@ Response shape:
   "transaction_id": "source-transaction-id",
   "risk_score": 0.0,
   "decision": "review",
-  "policy_version": "v1",
+  "policy_version": "v2",
   "evidence": {
     "transactions": [],
     "accounts": [],
@@ -98,6 +98,40 @@ Errors: a transaction absent from the score artifact returns 404 `transaction no
 The model returns a draft with a hypothesis, supporting and counter-evidence transaction IDs, `cited_claims`, and `cited_paths`. Deterministic code accepts it only if every cited ID exists in the retrieved evidence, every claim's timestamp, amount, currency, and account keys equal the evidenced record, every cited path equals a path a query returned, and identifiers and amount-sized numbers written in the hypothesis come from the evidence. The model never sets `risk_score`, `decision`, or `recommendation`; the recommendation is fixed to `review` by code.
 
 Responses add these optional report fields: `source` (`deterministic` or `llm`), `cited_claims`, `cited_paths`, and `llm`. `llm` records `provider`, `model`, `status` (`completed`, `fallback`, `unavailable`), `fallback_reason`, `rounds`, `tool_calls`, token counts, `duration_ms`, and `estimated_cost_usd` (present only when both per-million-token prices are configured; no price is assumed). `fallback_reason` is one of `not_configured`, `provider_error`, `timeout`, `invalid_output`, `verification_failed`. Any of these returns HTTP 200 with the deterministic report; none produces a raw provider message. FalkorDB failures are not masked and return the same 503/504 as the deterministic path. Prompts, tool results, and keys are never returned or logged. When `use_llm` is true, retrieved synthetic evidence is sent to the provider; the default path sends nothing.
+
+The draft must also carry `risk_level` (an integer 1 to 5 under the rubric in the system prompt) and `reasoning`: 1 to 6 points, each a `statement` and 1 to 10 `evidence_ids`. Every cited ID must be a returned transaction and every statement passes the same prose check as the hypothesis; a missing or out-of-range level is `invalid_output`, and an unbacked point is `verification_failed`. Verified reports return both fields; deterministic reports return `risk_level: null` and an empty `reasoning`. Each model tool call also declares a `purpose` (one sentence). It is shown to the analyst only if it passes the prose check against the evidence returned so far; otherwise the stream says the purpose was not verifiable. The purpose never changes what the tool runs.
+
+### Escalation chain
+
+Policy version `v2` adds a deterministic escalation over the model route and the agent's verified risk level (`api.policy`, ADR-023). Every investigation response carries `escalation`:
+
+| Field | Meaning |
+| --- | --- |
+| `route` | `blocked_by_rule` when the score is at or above `TRACEAML_BLOCK_THRESHOLD` (default `0.999`, blank disables the rule), `flagged_for_review` at or above the validation-selected review threshold, otherwise `standard_path` |
+| `review_threshold`, `block_threshold` | The thresholds applied |
+| `agent_status` | `rated` (a verified LLM report supplied a level), `unavailable` (a flagged transaction without one), `not_applicable` |
+| `risk_level` | The verified level, or null |
+| `outcome` | `block`, `allow`, or `pending_review` |
+| `decided_by` | `rule`, `agent`, or `model` |
+| `reason` | One or two sentences for the analyst |
+| `simulated` | Always `true`: no block reaches a payment system |
+
+Mapping: `blocked_by_rule` is `block` whatever the agent rates (it cannot reverse an upstream block). `flagged_for_review` with level 4 or 5 is `block`, with level 1 to 3 is `allow`, and without a verified level (no provider, failure, timeout, rejected draft, or the agent was not requested) stays `pending_review` for an operator. `standard_path` is `allow`; the agent review is informational there. The existing `decision` field, the case gate, and the score are unchanged.
+
+### `POST /api/investigations/stream`
+
+Same request body as `POST /api/investigations`. Errors known before the investigation starts (unscored transaction, missing artifacts, invalid bounds) return the usual status and JSON `detail`. Otherwise the response is `text/event-stream`, one JSON object per `data:` line:
+
+| Event | Payload |
+| --- | --- |
+| `started` | `transaction_id`, `risk_score`, `decision`, `route`, `review_threshold`, `block_threshold`, `policy_version`, the bounds, `agent` (`llm` or `deterministic`), `llm_provider`, `llm_model` |
+| `tool_started` | `call_id`, `tool`, `origin`, `transport`, `arguments`, `purpose` |
+| `tool_completed`, `tool_failed` | `call_id`, `entry` (a `tool_trace` entry), `statements` (each executed Cypher statement with `cypher`, `parameters`, `rows`, `duration_ms`), and `evidence` (`transactions`, `accounts`, `paths` that call returned; null when it failed) |
+| `agent_step` | `phase` (`round_started`, `round_finished`, `report_started`, `report_finished`), `round`, `tool_calls`; counts only, never model text |
+| `investigation_completed` | The full `InvestigationResponse`, including `escalation` and, with `act`, `action` |
+| `error` | `status` and `detail`, the same fixed values the non-streaming endpoint returns |
+
+Events arrive as they happen: deterministic tool calls run concurrently, so their events interleave; LLM calls are sequential. Per-call `evidence` is shaped through the same allowlists as the final evidence; later calls may repeat records, so clients merge by ID. The final response is the authority, and the union of streamed evidence equals its evidence. Statements are recorded by a proxy on the graph handle while a call runs; they are never sent to the model and never appear in the final response. Disconnecting stops delivery; a case action (`act`) is applied only after the investigation completes and while the client is still connected.
 
 ### Typed outcome, tool trace and MCP boundary
 

@@ -53,8 +53,8 @@ The dataset is synthetic. Results demonstrate behavior on the selected benchmark
 | Area | Choice | Responsibility |
 | --- | --- | --- |
 | Web | Next.js App Router, React, TypeScript, Tailwind CSS, shadcn/ui | Analyst workbench |
-| Graph view | Cytoscape.js | Render query-derived investigation subgraphs |
-| API state and charts | TanStack Query, Recharts | Synchronize API state and present recorded benchmark results |
+| Graph view | React Flow with dagre layout | Render query-derived investigation subgraphs |
+| API state and charts | TanStack Query, Zod, Apache ECharts | Synchronize and validate API state; present recorded benchmark results |
 | API | Python, FastAPI, Pydantic | Typed endpoints, scoring orchestration, evidence validation |
 | Data | Polars, DuckDB, PyArrow, Parquet | Profiling, transformation, splits, feature tables |
 | Models | scikit-learn, LightGBM | Logistic baseline and tabular/graph-feature classifiers |

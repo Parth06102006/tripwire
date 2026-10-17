@@ -178,3 +178,62 @@ Outcomes and trace: every tool call is recorded (tool, bounded arguments, who ch
 Action: the agent proposes `open_case` or `enrich_case` in its draft (with a reason that is verified like the hypothesis); without an LLM, policy makes the same proposal. Code applies it only when evidence was found, the decision is `review` for opening, every evidence reference exists in the returned evidence, and the case state allows it. Writes go to the SQLite case store as append-only evidence with tool-run IDs and a score and decision snapshot, never to FalkorDB. Cases stay `suspected` until an analyst confirms or dismisses them (ADR-006, case memory rule). The action is opt-in per request (`act`).
 
 Status: unit-tested with a scripted model, a fake graph, and a real MCP session. The live tests against FalkorDB (`test_agent_live_graph.py`) skip when it is unreachable and have not been run against a live graph yet.
+
+## ADR-022: Rebuilt workbench: three screens, React Flow, ECharts, honest request/response activity
+
+**Status:** Accepted
+
+The Iteration 2 workbench (six screens, Cytoscape.js, Recharts, browser-kept run history, Recorded mode) was removed and `apps/web/` rebuilt with three screens: Overview, Investigation and Performance. The case of a transaction is part of the Investigation screen.
+
+Graph library: React Flow (`@xyflow/react`) with a dagre layout. Investigation subgraphs are bounded by the API (at most 100 rows per tool and branch, 1 to 3 hops). The largest response measured on the demo graph, 254 nodes and 284 edges at maximum bounds, renders and zooms without long tasks apart from the one-time layout of each run. Custom React nodes for accounts, transactions and the alert anchor carry the evidence styling. Cytoscape.js stays the fallback if real responses outgrow this; the client display limit (`NEXT_PUBLIC_GRAPH_NODE_LIMIT`, default 600) is where that would show first. The layout is a pure fold over the runs of the session, so the same responses always produce the same positions, and later runs only add nodes.
+
+Charts: Apache ECharts with only the bar and line modules registered, rendered as SVG. Series colours are a categorical set validated for colour-vision deficiency on the dark surface and kept clear of the status colours.
+
+Activity: the API returns an investigation as one response. The timeline does not simulate streaming. It shows the request, a truthful waiting state, then the events the response reports. A streaming endpoint (for example server-sent events carrying each tool-trace entry and its evidence as it completes) would let the graph grow per tool. It is recorded as a backend requirement, not built into the UI.
+
+Data handling: Zod validates every response at the client boundary and strips unknown fields. Unit and component tests use invented identifiers. End-to-end tests run against a live stack and write to the case store the API is configured with, so they run against a scratch `TRACEAML_CASE_DB_PATH`.
+
+## ADR-023: Escalation chain, agent risk level, and a streamed agent review
+
+**Status:** Accepted
+
+The deterministic model gathers suspicious transactions for operators; the agent review is the review of a flagged transaction. The escalation chain is:
+
+1. Traditional model and rules. A score at or above `TRACEAML_BLOCK_THRESHOLD` is a simulated block. The default `0.999` is a placeholder chosen without validation labels (it covers 42 of the 1,627 flagged test transactions) and must be set from validation precision before it is relied on. Blank disables the rule.
+2. Review routing. At or above the validation-selected review threshold the transaction is flagged for agent review; below it, it takes the standard path and is allowed.
+3. Agent review. The Gemini agent proposes a risk level from 1 to 5 under a fixed rubric, with reasoning points that cite returned transactions. Code verifies both like the hypothesis, then maps 4 to 5 to a block and 1 to 3 to an allow. Without a verified level the transaction stays flagged for an operator; it is not silently allowed. The agent cannot reverse an upstream block and does not change a standard-path allow.
+
+This keeps ADR-006: the model proposes and deterministic policy decides, and every block is simulated. Policy version moves to `v2`; the `decision` field and the case gate are unchanged, and the outcome is a new `escalation` object.
+
+Streaming: `POST /api/investigations/stream` sends server-sent events as tool calls start and finish, replacing the "backend requirement" recorded in ADR-022. A listener on the traced tools (both the direct and the MCP transport) emits each call with its arguments, a stated purpose (fixed text for policy calls, the agent's verified one-sentence intent for model calls), the evidence it returned shaped through the existing allowlists, and the Cypher it executed. Cypher is captured by a proxy on the pooled graph handle while a call runs on its worker thread, so `graph/` is unchanged and the statements shown are the statements sent. The model never receives them. The final event is the full response, which remains the authority.
+
+Model text between tool calls is not streamed or shown; only counts of rounds and calls. The UI paces the display of real events so the graph visibly grows; it never invents, reorders or delays the recording of an event, and it shows the API's measured durations.
+
+Status: the escalation table, verification of the level and reasoning, both transports, Cypher capture across MCP, and stream errors are covered by `services/api/tests/test_stream.py`. The live stream was exercised against FalkorDB with the deterministic agent. The Gemini agent path is tested with a scripted model only; no provider key was available to run it live.
+
+## ADR-024: Every scored transaction must be investigable; availability is reported, never filtered
+
+**Status:** Accepted
+
+The demo graphs were slices, so many queued alerts could not be investigated and failed only when an analyst opened them. The working environment now loads the full HI-Small v8 graph (5,078,345 transactions) under the contract name `traceaml`, so every scored transaction exists in the graph the agent queries.
+
+As a safeguard against partial or failed ingestion, `GET /api/alerts` reports `graph_status` per alert from one bounded, indexed lookup per page. The queue marks a missing alert instead of hiding it: filtering would silently drop flagged alerts, which an AML queue must never do, and a visible gap gets the ingestion fixed. When FalkorDB cannot be asked the status is `unknown` and the queue still loads. Demo slices remain available through `make graph-load-demo` for fast local work, with the same visible marking.
+
+## ADR-025: A public landing page at `/`, one theme for landing and workbench
+
+**Status:** Accepted
+
+The landing page built on the `feat/landing-page` branch is merged into the rebuilt workbench as it was. It lives in `apps/web/src/components/landing/` and is served at `/`, so the Overview screen moved to `/overview`. A route group `(workbench)` keeps the sidebar shell on `/overview`, `/investigation` and `/performance`, while `(landing)` renders full width without it. The landing links that pointed at the old six-page workbench now point at the three screens.
+
+The workbench adopts the landing theme rather than the reverse: the near-black canvas, the single orange accent, and Inter with JetBrains Mono. The landing vocabulary (`canvas`, `card`, `ink`, `dim`, `line`, `accent`, `safe`, `warning`, `critical`) and the workbench vocabulary (`background`, `surface`, `fg`, `fg-muted`, `border`) resolve to the same variables in `globals.css`. Colour meaning is unchanged: orange for the product, agent and alert anchor, green for verified evidence, amber for review, red for critical risk. The former `violet`, `teal`, `amber` and `coral` utility names were renamed to `accent`, `safe`, `warning` and `critical` so the names match what the colours now are.
+
+The landing page keeps its own content. Its recorded-metrics strip reads the same `/api/benchmarks` data as the Performance screen through the shared client.
+
+## ADR-026: Detection benchmarks come from the Iteration 2 results; the alert queue filters on the server
+
+**Status:** Accepted
+
+The performance screen had been serving the Iteration 1 baseline metrics, which `docs/benchmarks/iteration-2-detection.md` supersedes. `/api/benchmarks` now serves the four rows of that document's summary (the frozen Iteration 1 baseline, C3, C2, and the selected model C1) from a committed export, `docs/benchmarks/iteration-2-detection.json`. `ml/experiments/export_api_benchmarks.py` writes it from the frozen test ledger, so the figures are not retyped, and a test pins the C1 values. The Sept 9-10 bulk is exported beside the full-cohort figures and the screen leads with it, because the document shows the full-cohort numbers are inflated by a near-separable 1,108-row tail. The export adds metrics only: no scores, labels or per-row outcomes. The replay queue is still scored by the Iteration 1 artifact until `TRACEAML_SCORE_ARTIFACT` is switched as the document describes.
+
+The overview queue now filters on the API (route, score range, day range, transaction ID text) instead of only within the loaded page, so a filter reaches all 761,639 scored transactions. Route and score filters are rank ranges found by bisection; date and text filters take one pass over the matching score window. The queue never drops an alert silently: filters are explicit, shown, and clearable, and `scored_total` stays visible. The overview is one viewport tall from the `xl` breakpoint up, and only the queue table scrolls.
+
