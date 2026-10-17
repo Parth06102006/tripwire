@@ -1,0 +1,127 @@
+# TraceAML production stack for a single host (EC2, GCE, Azure VM).
+#
+#   docker compose -f deploy/compose.prod.yaml --env-file deploy/.env.production up -d --build
+#
+# Only Caddy publishes ports. FalkorDB, the API and the web server are reachable
+# only on the private "backend" network. See docs/deployment.md.
+
+name: traceaml
+
+services:
+  falkordb:
+    # Pinned by digest: the exact build (graph module 4.22.1) the release was
+    # tested with. Update deliberately, after re-running the API tests.
+    image: falkordb/falkordb-server@sha256:2e99eb1cfa3309ce338beebe24b5e9f44f9eb8ead6d6ef63dcaca436afbbaeec
+    restart: unless-stopped
+    networks: [backend]
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      # Loading a large RDB snapshot after a restart takes a while.
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          memory: ${FALKORDB_MEMORY_LIMIT:-10g}
+    stop_grace_period: 2m
+
+  api:
+    build:
+      context: ..
+      dockerfile: services/api/Dockerfile
+    image: ${IMAGE_PREFIX:-traceaml}/api:${RELEASE:-local}
+    restart: unless-stopped
+    networks: [backend]
+    env_file: .env.production
+    environment:
+      TRACEAML_FALKORDB_HOST: falkordb
+      TRACEAML_FALKORDB_PORT: "6379"
+      TRACEAML_CASE_DB_PATH: /app/data/cases/cases.db
+    volumes:
+      # Label-free release artifacts only (deploy/scripts/make_release_bundle.py).
+      - ${ARTIFACTS_DIR:-/srv/traceaml/artifacts}:/app/artifacts:ro
+      - cases:/app/data/cases
+      # Graph load input, read only by the one-shot loader.
+      - ${GRAPH_INPUT_DIR:-/srv/traceaml/graph-input}:/srv/graph-input:ro
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        TRACEAML_API_ORIGIN: http://api:8000
+    image: ${IMAGE_PREFIX:-traceaml}/web:${RELEASE:-local}
+    restart: unless-stopped
+    networks: [backend]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    networks: [backend]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      TRACEAML_DOMAIN: ${TRACEAML_DOMAIN:?set TRACEAML_DOMAIN in deploy/.env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL (Let's Encrypt expiry and revocation notices)}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH (caddy hash-password)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+
+  # One-shot graph loader, run on demand:
+  #   docker compose -f deploy/compose.prod.yaml --env-file deploy/.env.production \
+  #     --profile tools run --rm graph-loader
+  graph-loader:
+    image: ${IMAGE_PREFIX:-traceaml}/api:${RELEASE:-local}
+    profiles: [tools]
+    networks: [backend]
+    volumes:
+      - ${GRAPH_INPUT_DIR:-/srv/traceaml/graph-input}:/srv/graph-input:ro
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    entrypoint: ["traceaml-load-graph"]
+    command:
+      - --parquet
+      - /srv/graph-input/graph-transactions.parquet
+      - --host
+      - falkordb
+      - --graph-name
+      - ${TRACEAML_GRAPH_NAME:-traceaml}
+      - --mode
+      - ${GRAPH_LOAD_MODE:-create}
+
+networks:
+  backend: {}
+
+volumes:
+  falkordb-data: {}
+  cases: {}
+  caddy-data: {}
+  caddy-config: {}

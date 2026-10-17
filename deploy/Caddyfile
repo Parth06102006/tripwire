@@ -1,0 +1,37 @@
+# Public entry point: TLS (Let's Encrypt), HTTP basic auth in front of the
+# whole app, then the Next.js server, which forwards /api to the API.
+#
+# The application has no login of its own. Keep basic auth (or put an identity
+# proxy in front) whenever the host is reachable from the internet.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$TRACEAML_DOMAIN} {
+	encode zstd gzip
+
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# The agent review is a server-sent event stream: never buffer it, and
+	# allow long reviews when the LLM agent is on.
+	@stream path /api/investigations/stream
+	reverse_proxy @stream web:3000 {
+		flush_interval -1
+		transport http {
+			read_timeout 5m
+		}
+	}
+
+	reverse_proxy web:3000
+}

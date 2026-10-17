@@ -48,3 +48,4 @@ falkordb-data/
 # Local logs and agent worktrees
 artifacts/logs/
 .claude/worktrees/
+!deploy/.env.production.example
