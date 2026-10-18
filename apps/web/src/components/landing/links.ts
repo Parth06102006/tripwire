@@ -6,10 +6,12 @@ export const REPO_ISSUES_URL = `${REPO_URL}/issues`;
 export const WORKBENCH_HREF = "/overview";
 export const DEMO_HREF = "/investigation";
 export const PERFORMANCE_HREF = "/performance";
+export const DOCS_HREF = "/docs";
 
 export const NAV_LINKS = [
   { href: "#product", label: "Product" },
   { href: "#how-it-works", label: "How it works" },
   { href: "#typologies", label: "Typologies" },
   { href: "#benchmarks", label: "Benchmarks" },
+  { href: "/docs", label: "Docs" },
 ] as const;

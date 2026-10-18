@@ -59,7 +59,8 @@ describe("AlertQueue", () => {
     );
     renderWithClient(<AlertQueue />);
     await screen.findByText("tx-high");
-    expect(calls[0]?.path).toContain("route=flagged_for_review");
+    const alertsCall = calls.find((c) => c.path.includes("/api/alerts"));
+    expect(alertsCall?.path).toContain("route=flagged_for_review");
     const chip = screen.getByRole("button", { name: /Flagged for review/ });
     expect(chip).toHaveAttribute("aria-pressed", "true");
   });

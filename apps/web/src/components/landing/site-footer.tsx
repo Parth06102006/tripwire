@@ -15,6 +15,7 @@ const API_DOCS_URL =
 
 const PLATFORM_LINKS = [
   { label: "Live Workbench", href: WORKBENCH_HREF, external: true },
+  { label: "Documentation", href: "/docs" },
   { label: "Alert Queue", href: WORKBENCH_HREF },
   { label: "Graph Investigation", href: DEMO_HREF },
   { label: "Performance", href: PERFORMANCE_HREF },
