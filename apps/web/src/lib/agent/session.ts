@@ -7,7 +7,7 @@
  * sent. Each evidence batch is laid out once, when it arrives, keeping every
  * earlier position, so the graph grows without jumping.
  */
-import { ApiError, describeApiError, type ApiErrorKind } from "@/lib/api-client";
+import { ApiError, describeApiError, type ApiErrorKind, type RateLimit } from "@/lib/api-client";
 import type {
   InvestigationRequest,
   InvestigationResponse,
@@ -71,6 +71,8 @@ export type ClientFailure = {
   message: string;
   status: number | null;
   detail: string | null;
+  /** Set on a 429, so the transcript can say when to try again. */
+  rateLimit?: RateLimit | null;
 };
 
 export type ReviewAction =
@@ -144,7 +146,13 @@ function failureItem(run: number, failure: ClientFailure, key: string): Transcri
     status: failure.status,
     detail: failure.detail,
     message: describeApiError(
-      new ApiError(failure.kind, failure.message, failure.status, failure.detail),
+      new ApiError(
+        failure.kind,
+        failure.message,
+        failure.status,
+        failure.detail,
+        failure.rateLimit ?? null,
+      ),
     ),
   };
 }

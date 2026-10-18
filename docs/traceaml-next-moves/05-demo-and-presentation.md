@@ -2,7 +2,7 @@
 
 ## 1. Positioning
 
-**One-line pitch:** TraceAML investigates suspicious synthetic transactions by following connected money flows in FalkorDB, lets an agent select bounded graph tools, and turns verified evidence into an auditable case for human review.
+**One-line pitch:** Tripwire investigates suspicious synthetic transactions by following connected money flows in FalkorDB, lets an agent select bounded graph tools, and turns verified evidence into an auditable case for human review.
 
 **What makes it Track 1:** The graph is not a visualization bolted onto a classifier. The agent uses relationships in FalkorDB to choose what to inspect next, the path determines which evidence can be cited, and validated evidence can drive a controlled case action.
 
@@ -10,7 +10,7 @@
 
 ### Competition calibration
 
-The WeMakeDevs recap of its September First Commit event is a useful product-presentation reference, not a Graph Hacks scoring rubric. It reports 13,667 signups, 4,270 teams and 1,180 submissions, with three main prize winners and four runners-up. That is a 27.6% submission rate per formed team; seven named prize outcomes equal 0.59% of submissions. These are event participation/outcome ratios, not TraceAML's odds: First Commit had a different format and award structure. The recap highlights winners with a clear user, a complete action loop, a deployed or directly usable experience, and—in the Best UI winner's case—an interaction that was easy to understand by watching. It publishes no judging scores or weights. Use that as a reminder to make TraceAML's graph-driven investigation and case action visible; do not infer that Graph Hacks uses the same criteria. Source: <https://www.wemakedevs.org/blogs/first-commit-hackathon-recap-and-whats-next>.
+The WeMakeDevs recap of its September First Commit event is a useful product-presentation reference, not a Graph Hacks scoring rubric. It reports 13,667 signups, 4,270 teams and 1,180 submissions, with three main prize winners and four runners-up. That is a 27.6% submission rate per formed team; seven named prize outcomes equal 0.59% of submissions. These are event participation/outcome ratios, not Tripwire's odds: First Commit had a different format and award structure. The recap highlights winners with a clear user, a complete action loop, a deployed or directly usable experience, and—in the Best UI winner's case—an interaction that was easy to understand by watching. It publishes no judging scores or weights. Use that as a reminder to make Tripwire's graph-driven investigation and case action visible; do not infer that Graph Hacks uses the same criteria. Source: <https://www.wemakedevs.org/blogs/first-commit-hackathon-recap-and-whats-next>.
 
 ## 2. Audience and problem statement
 
@@ -37,7 +37,7 @@ Choose the exact anchor transaction and expected paths before recording. Store t
 
 ### 0:00–0:20 — Problem and product
 
-Say: “A transaction score tells us where to look. It does not show the full money flow. TraceAML follows the graph, retrieves the actual transactions, and turns supported findings into a review case.”
+Say: “A transaction score tells us where to look. It does not show the full money flow. Tripwire follows the graph, retrieves the actual transactions, and turns supported findings into a review case.”
 
 Show the alert queue and synthetic-replay label. State that the underlying dataset is synthetic.
 
@@ -129,7 +129,7 @@ Fixed graph tools through MCP
 Evidence verifier ---> Deterministic case action / optional LLM draft
         |
         v
-TraceAML analyst workbench
+Tripwire analyst workbench
 ```
 
 Explain the roles clearly:

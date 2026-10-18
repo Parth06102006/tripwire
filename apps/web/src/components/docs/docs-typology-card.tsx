@@ -121,7 +121,8 @@ export function DocsTypologyCard() {
             Interactive AML Typology Explorer
           </h4>
           <p className="text-xs text-fg-muted">
-            Select a synthetic IBM AMLworld typology pattern to view graph traversal mechanics
+            Select a synthetic IBM AMLworld typology pattern to see its graph mechanism, red flags,
+            and the Cypher pattern that exposes it
           </p>
         </div>
         <span className="rounded-full bg-accent-soft px-3 py-1 font-mono text-2xs font-medium text-accent">

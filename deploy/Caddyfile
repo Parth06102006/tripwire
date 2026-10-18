@@ -1,8 +1,11 @@
-# Public entry point: TLS (Let's Encrypt), HTTP basic auth in front of the
-# whole app, then the Next.js server, which forwards /api to the API.
+# Public entry point: TLS (Let's Encrypt) and routing. There is no password
+# prompt here: sign-in is Better Auth in the web app (Google and GitHub, an
+# access list), and the API verifies the signed token every request carries.
 #
-# The application has no login of its own. Keep basic auth (or put an identity
-# proxy in front) whenever the host is reachable from the internet.
+#   /api/auth/*  -> web:3000   sign-in, session and token endpoints
+#   /api/*       -> api:8000   straight to the API, so a long review stream is
+#                              not cut by the Next.js proxy's 30 second limit
+#   everything else -> web:3000
 
 {
 	email {$ACME_EMAIL}
@@ -10,10 +13,6 @@
 
 {$TRACEAML_DOMAIN} {
 	encode zstd gzip
-
-	basic_auth {
-		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
-	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -23,15 +22,26 @@
 		-Server
 	}
 
+	handle /api/auth/* {
+		reverse_proxy web:3000
+	}
+
 	# The agent review is a server-sent event stream: never buffer it, and
 	# allow long reviews when the LLM agent is on.
-	@stream path /api/investigations/stream
-	reverse_proxy @stream web:3000 {
-		flush_interval -1
-		transport http {
-			read_timeout 5m
+	handle /api/investigations/stream {
+		reverse_proxy api:8000 {
+			flush_interval -1
+			transport http {
+				read_timeout 5m
+			}
 		}
 	}
 
-	reverse_proxy web:3000
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
 }

@@ -1,12 +1,12 @@
 import { CtaArrow, CtaLink } from "./cta";
-import { DEMO_HREF, REPO_URL, WORKBENCH_HREF } from "./links";
+import { SIGN_IN_HREF } from "./links";
 
-interface HeroProps {
-  onRequestDemo?: () => void;
-  onContact?: () => void;
-}
-
-export default function Hero({ onRequestDemo, onContact }: HeroProps) {
+/**
+ * The hero: the headline, one line on what the product does, and one way in.
+ * Get started goes to the sign-in page, which sends a visitor who is already
+ * signed in straight on to the workbench.
+ */
+export default function Hero() {
   return (
     <section aria-labelledby="hero-title" className="relative">
       {/* Ambient warm gradient radiating from below and center */}
@@ -31,59 +31,24 @@ export default function Hero({ onRequestDemo, onContact }: HeroProps) {
             </span>
             <h1
               id="hero-title"
-              className="mt-5 animate-hero-rise text-[clamp(2.7rem,6.4vw,5.1rem)] leading-[0.98] font-bold tracking-[-0.035em] text-white"
+              className="mt-5 animate-hero-rise text-[clamp(2.4rem,4.4vw,3.8rem)] leading-[1.02] font-bold tracking-[-0.035em] text-white"
             >
-              Follow the money.
-              <br />
-              Uncover the network.
+              {/* One line per sentence from the lg breakpoint up; narrower screens may wrap. */}
+              <span className="block lg:whitespace-nowrap">Follow the money.</span>
+              <span className="block lg:whitespace-nowrap">Uncover the network.</span>
             </h1>
           </div>
 
           {/* Right description and action column */}
           <div className="flex flex-col justify-end lg:col-span-5 lg:pb-2 xl:col-span-5">
-            <p className="max-w-[44ch] animate-hero-rise text-[15px] leading-7 font-normal text-[#b5b8b4] [animation-delay:120ms] sm:text-[16px]">
-              Score suspicious transfers, let the agent trace the money through bounded Cypher, and
-              read an investigation report where every claim is checked against the records behind
-              it.
+            <p className="max-w-[40ch] animate-hero-rise text-[15px] leading-7 font-normal text-[#b5b8b4] [animation-delay:120ms] sm:text-[16px]">
+              Trace suspicious money through the graph, with every claim checked against the
+              records.
             </p>
             <div className="mt-7 flex animate-hero-rise flex-wrap items-center gap-3.5 [animation-delay:200ms]">
-              {onRequestDemo ? (
-                <button
-                  type="button"
-                  onClick={onRequestDemo}
-                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent px-6 py-3 text-[14px] font-semibold text-accent-ink shadow-[0_14px_40px_-16px_rgba(242,140,56,0.9)] transition-all duration-200 hover:shadow-[0_18px_48px_-14px_rgba(242,140,56,0.95)] hover:brightness-110"
-                >
-                  Request a demo
-                  <CtaArrow />
-                </button>
-              ) : (
-                <CtaLink href={DEMO_HREF} size="lg">
-                  Request a demo
-                  <CtaArrow />
-                </CtaLink>
-              )}
-
-              {onContact ? (
-                <button
-                  type="button"
-                  onClick={onContact}
-                  className="inline-flex items-center justify-center rounded-full border border-line-strong bg-[#141516]/80 px-6 py-3 text-[14px] font-medium text-ink transition-colors hover:border-white/30 hover:bg-white/[0.06]"
-                >
-                  Contact us
-                </button>
-              ) : (
-                <CtaLink href={REPO_URL} variant="secondary" size="lg">
-                  Contact us
-                </CtaLink>
-              )}
-
-              <CtaLink
-                href={WORKBENCH_HREF}
-                variant="quiet"
-                size="md"
-                className="hidden text-[13px] text-dim hover:text-accent xl:inline-flex"
-              >
-                Open the workbench
+              <CtaLink href={SIGN_IN_HREF} size="lg">
+                Get started
+                <CtaArrow />
               </CtaLink>
             </div>
           </div>

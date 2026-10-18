@@ -5,7 +5,8 @@
  */
 import type { z } from "zod";
 
-import { ApiError } from "@/lib/api-client";
+import { ApiError, readErrorBody } from "@/lib/api-client";
+import { authorizedFetch } from "@/lib/auth/fetch";
 import {
   investigationResponseSchema,
   streamAgentStepSchema,
@@ -58,19 +59,6 @@ export function parseFrame(frame: string): StreamEvent | null {
   return { type: name, data: parsed.data } as StreamEvent;
 }
 
-async function readDetail(response: Response): Promise<string | null> {
-  try {
-    const payload: unknown = await response.json();
-    if (payload && typeof payload === "object" && "detail" in payload) {
-      const { detail } = payload as { detail: unknown };
-      if (typeof detail === "string") return detail;
-    }
-  } catch {
-    // No JSON detail.
-  }
-  return null;
-}
-
 /** Stream one investigation, calling `onEvent` for each validated event in order. */
 export async function streamInvestigation(
   request: InvestigationRequest,
@@ -78,7 +66,7 @@ export async function streamInvestigation(
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch("/api/investigations/stream", {
+    response = await authorizedFetch("/api/investigations/stream", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "text/event-stream" },
       body: JSON.stringify(request),
@@ -95,8 +83,14 @@ export async function streamInvestigation(
     );
   }
   if (!response.ok || !response.body) {
-    const detail = await readDetail(response);
-    throw new ApiError("http", detail ?? `HTTP ${response.status}`, response.status, detail);
+    const { detail, rateLimit } = await readErrorBody(response);
+    throw new ApiError(
+      "http",
+      detail ?? `HTTP ${response.status}`,
+      response.status,
+      detail,
+      rateLimit,
+    );
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();

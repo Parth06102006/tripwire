@@ -148,6 +148,7 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-dim: var(--dim);
   --color-safe: var(--safe);
   --color-warning: var(--warning);
@@ -312,6 +313,16 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: draw-edge 650ms ease-out 120ms forwards;
+}
+
+/* Landing Cypher sandbox: a bar sweeping across while the query "runs". */
+@keyframes sandbox-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
 }
 
 @keyframes draw-edge {

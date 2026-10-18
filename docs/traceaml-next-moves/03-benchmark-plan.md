@@ -1,6 +1,6 @@
 # 03 — Benchmark and Evaluation Plan
 
-This document defines what TraceAML can responsibly claim and how to produce final measurements. It separates detection performance, graph performance, agent quality and operating cost. Those are related but not interchangeable.
+This document defines what Tripwire can responsibly claim and how to produce final measurements. It separates detection performance, graph performance, agent quality and operating cost. Those are related but not interchangeable.
 
 ## 1. Why benchmark discipline matters
 

@@ -6,7 +6,7 @@
 
 ## 1. Executive assessment
 
-TraceAML has not materially drifted from the original idea. It has progressed from the planned offline baseline and graph prototype into a substantially implemented local-first product:
+Tripwire has not materially drifted from the original idea. It has progressed from the planned offline baseline and graph prototype into a substantially implemented local-first product:
 
 - Offline data preparation and chronological evaluation are implemented.
 - The original tabular baseline and expanded Iteration 2 feature families are implemented.
@@ -39,7 +39,7 @@ The repository's root commit is timestamped 2026-10-15 00:13 IST, twelve minutes
 
 ## 2. Original product promise to preserve
 
-TraceAML replays synthetic IBM AMLworld HI-Small transactions. It scores held-out transactions with offline-trained models, retrieves bounded transaction-flow evidence from FalkorDB, and presents a verified investigation report. Reports are deterministic by default, with an optional Gemini agent to draft reports from approved graph evidence.
+Tripwire replays synthetic IBM AMLworld HI-Small transactions. It scores held-out transactions with offline-trained models, retrieves bounded transaction-flow evidence from FalkorDB, and presents a verified investigation report. Reports are deterministic by default, with an optional Gemini agent to draft reports from approved graph evidence.
 
 It is a local-first prototype. It does not connect to a financial institution, block real payments, or file regulatory reports. Its conclusions describe behavior in a synthetic dataset.
 

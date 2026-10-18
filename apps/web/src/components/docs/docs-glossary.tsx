@@ -61,12 +61,28 @@ const GLOSSARY_TERMS: Term[] = [
       "When an analyst confirms an investigation in TraceAML, the workbench compiles the Cypher graph paths, LLM findings, and transaction timestamps into an audit-ready dossier.",
   },
   {
+    term: "Agent Pass",
+    category: "System Architecture",
+    definition:
+      "The optional second layer of review in TraceAML: an LLM tool-calling agent that runs downstream of the model on flagged transactions, with bounded tools and a fixed human-review recommendation.",
+    context:
+      "Enabled per investigation with use_llm: the agent drafts a risk level from 1 to 5 with reasoning points, and the deterministic verifier accepts them only when every cited record was returned by an approved tool.",
+  },
+  {
+    term: "Tool Trace",
+    category: "System Architecture",
+    definition:
+      "The recorded facts of each graph tool call: tool name, bounded arguments, the executed Cypher statements, row counts, duration, and outcome.",
+    context:
+      "The evidence verifier and the analyst interface both read from the same tool trace, so a report can cite only records that a tool actually returned.",
+  },
+  {
     term: "Model Context Protocol (MCP)",
     category: "System Architecture",
     definition:
       "An open protocol developed to standardize how LLMs connect with external data tools, APIs, and graph query execution engines.",
     context:
-      "The Gemini agent in TraceAML calls FalkorDB through MCP tools, preventing raw database access while logging a cryptographically verified tool trace.",
+      "The Gemini agent in TraceAML calls FalkorDB through MCP tools (trace_funds, inspect_counterparties, detect_flow_patterns), preventing raw database access while logging a verifiable tool trace.",
   },
   {
     term: "Deterministic Policy Ownership",

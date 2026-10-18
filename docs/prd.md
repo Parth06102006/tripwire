@@ -1,10 +1,10 @@
-# TraceAML Product Requirements
+# Tripwire Product Requirements
 
 ## Product summary
 
-TraceAML is a graph-powered AML detection and investigation workbench for analysts. It replays the synthetic IBM AMLworld HI-Small transactions, scores them with reproducible classical models, retrieves bounded money-flow evidence from FalkorDB, and presents a verified investigation report for human review.
+Tripwire is a graph-powered AML detection and investigation workbench for analysts. It replays the synthetic IBM AMLworld HI-Small transactions, scores them with reproducible classical models, retrieves bounded money-flow evidence from FalkorDB, and presents a verified investigation report for human review.
 
-The repository is named Tripwire. TraceAML is the product name used in the interface and project documentation.
+The repository is named Tripwire. Tripwire is the product name used in the interface and project documentation.
 
 ## Users and product experience
 

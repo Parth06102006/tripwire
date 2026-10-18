@@ -1,16 +1,16 @@
-# TraceAML project context and Iteration 1 summary
+# Tripwire project context and Iteration 1 summary
 
 This document consolidates the decisions made during project planning, the work present in the repository, the measured results, and the remaining delivery gates. It is a project handoff for the team. The architecture and contracts remain authoritative in [architecture](architecture.md), [decisions](decisions.md), and [contracts](contracts.md); this summary links those decisions to their context and implementation.
 
 ## Project in one paragraph
 
-TraceAML is a local-first analyst workbench for replaying synthetic IBM AMLworld HI-Small transactions. It ranks transactions with reproducible classical models, uses FalkorDB to retrieve bounded transaction-flow evidence, validates investigation reports against queried records, and presents alerts, investigations, and benchmark measurements. The repository is named Tripwire. This is a research and demonstration system on synthetic data; it is not connected to a bank, does not freeze funds or file regulatory reports, and does not establish real-world AML effectiveness.
+Tripwire is a local-first analyst workbench for replaying synthetic IBM AMLworld HI-Small transactions. It ranks transactions with reproducible classical models, uses FalkorDB to retrieve bounded transaction-flow evidence, validates investigation reports against queried records, and presents alerts, investigations, and benchmark measurements. The repository is named Tripwire. This is a research and demonstration system on synthetic data; it is not connected to a bank, does not freeze funds or file regulatory reports, and does not establish real-world AML effectiveness.
 
 ## How the project direction was chosen
 
 The initial Iteration 1 proposal called for a measurable AML pipeline, a transaction graph, graph-enhanced detection, an evidence-grounded investigator, and an analyst workbench. It also proposed leaving advanced graph learning and model training research for a later iteration, guided by benchmark results.
 
-The public-work review identified [Tracer](research/tracer-aml-reference.md) as the closest product precedent and highlighted reusable ideas from IBM's Multi-GNN work, graph-feature implementations, and evidence-verification research. The decision was to learn from public workflow and evaluation patterns without treating published scores as comparable results. In particular, Tracer's account-level split and full-period aggregates do not answer what was knowable at a transaction's scoring time. TraceAML therefore uses a chronological, point-in-time protocol and a FalkorDB-centered investigation path. No Tracer source code was copied or vendored.
+The public-work review identified [Tracer](research/tracer-aml-reference.md) as the closest product precedent and highlighted reusable ideas from IBM's Multi-GNN work, graph-feature implementations, and evidence-verification research. The decision was to learn from public workflow and evaluation patterns without treating published scores as comparable results. In particular, Tracer's account-level split and full-period aggregates do not answer what was knowable at a transaction's scoring time. Tripwire therefore uses a chronological, point-in-time protocol and a FalkorDB-centered investigation path. No Tracer source code was copied or vendored.
 
 The final Iteration 1 target was narrowed to a working, measurable system rather than a collection of advanced models:
 

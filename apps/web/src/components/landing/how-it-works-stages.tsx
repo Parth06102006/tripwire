@@ -10,25 +10,24 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { useState } from "react";
-
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useStageTime } from "@/components/ui/teaser-progress";
 import { cn } from "@/lib/cn";
 
 import { StageChip, StageFrame } from "./stage-frame";
 
 /**
- * The four interactive panels for the "How it works" section. Each stage keeps
- * one idea and one control, so a visitor can see a step of the pipeline happen
- * instead of reading about it:
+ * The four panels for the "How it works" section. Each stage keeps one idea and
+ * plays it as its teaser scrolls past (useStageTime, 0 to 1), so a visitor sees
+ * a step of the pipeline happen without having to click anything:
  *
- *   ScoreStage   one draggable score, three policy bands
+ *   ScoreStage   a score climbing through three policy bands
  *   TraceStage   a bounded graph walk that follows one branch
  *   VerifyStage  claims checked one by one against returned records
  *   DecideStage  a decision appended to an append-only case history
  *
- * All data is illustrative and lives in this file.
+ * Outside a teaser (a test, a demo) a stage shows its finished state. All data
+ * is illustrative and lives in this file.
  */
 
 // ---- Step 01: score ---------------------------------------------------------
@@ -80,8 +79,13 @@ function verdictOf(score: number): ScoreVerdict {
   return "allow";
 }
 
+/** The score the walk starts from and ends on, as the teaser scrolls past. */
+const SCORE_FROM = 0.12;
+const SCORE_TO = 0.92;
+
 export function ScoreStage() {
-  const [score, setScore] = useState(0.68);
+  const time = useStageTime();
+  const score = Math.round((SCORE_FROM + (SCORE_TO - SCORE_FROM) * time) * 100) / 100;
   const key = verdictOf(score);
   const verdict = SCORE_VERDICT[key];
   const VerdictIcon = verdict.icon;
@@ -153,7 +157,7 @@ export function ScoreStage() {
 
       {/* The one control, kept at the bottom of the stage. */}
       <div className="mt-6 border-t border-line pt-4 sm:pt-5">
-        <p className="font-mono text-[11px] text-dim">drag to score</p>
+        <p className="font-mono text-[11px] text-dim">score as the transfer is read</p>
         <div className="relative mt-2 h-11">
           {/* Track: base, the review and block bands, then the value fill. */}
           <div className="absolute inset-x-0 top-1/2 h-2.5 -translate-y-1/2 overflow-hidden rounded-full bg-[#e6e7e5]/[0.07]">
@@ -192,25 +196,8 @@ export function ScoreStage() {
           {/* Handle. */}
           <span
             aria-hidden="true"
-            className="absolute top-1/2 size-[18px] -translate-y-1/2 rounded-full border-2 border-canvas bg-accent shadow-[0_0_0_3px_rgba(242,140,56,0.22)] transition-[left] duration-75"
+            className="absolute top-1/2 size-[18px] -translate-y-1/2 rounded-full border-2 border-canvas bg-accent shadow-[0_0_0_3px_rgba(242,140,56,0.22)] transition-[left] duration-150"
             style={{ left: `calc(${score} * (100% - 18px))` }}
-          />
-
-          {/* Transparent range input over the bar: pointer drag, arrow keys and Home/End. */}
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={score}
-            onChange={(event) => setScore(Number(event.target.value))}
-            aria-label="Risk score"
-            aria-valuetext={`${score.toFixed(2)}, ${verdict.label}`}
-            className="peer absolute inset-x-0 top-1/2 z-10 h-11 w-full -translate-y-1/2 cursor-ew-resize appearance-none bg-transparent opacity-0"
-          />
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-1/2 z-20 h-11 -translate-y-1/2 rounded-lg peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60"
           />
         </div>
 
@@ -292,10 +279,15 @@ function positionOf(id: string): { x: number; y: number } {
   return TRACE.find((node) => node.id === id) ?? ANCHOR;
 }
 
+/** When, in the stage's time, each hop is spent. */
+const WALK_AT = 0.25;
+const FOLLOW_AT = 0.65;
+
 export function TraceStage() {
   // `walked` spends the first hop, `branch` spends the second on one account.
-  const [walked, setWalked] = useState(false);
-  const [branch, setBranch] = useState<string | null>(null);
+  const time = useStageTime();
+  const walked = time >= WALK_AT;
+  const branch = time >= FOLLOW_AT ? FUNDS_BRANCH : null;
 
   const path = branch === FUNDS_BRANCH;
   const shown = TRACE.filter((node) => (node.depth === 1 ? walked : node.parent === branch));
@@ -314,12 +306,10 @@ export function TraceStage() {
         : { tone: "neutral" as BadgeTone, text: "no path here", label: null };
 
   const hint = !walked
-    ? "Walk one hop from the anchor, then pick which account to follow."
+    ? "The walk starts at the alert transaction."
     : !branch
-      ? `Hop budget ${HOP_BUDGET}. Pick one account to follow; a bounded walk follows one branch.`
-      : path
-        ? "Two transactions out and back: the walk returned this path as evidence."
-        : "This branch returned no funds path. Reset and follow another account.";
+      ? `One hop out: ${counterparts} counterparties. The hop budget is ${HOP_BUDGET}, so the walk follows one branch.`
+      : "Two hops out, one branch: the walk returned this funds path as evidence.";
 
   return (
     <StageFrame
@@ -404,16 +394,9 @@ export function TraceStage() {
         })}
 
         {/* Anchor: the transaction the investigation starts from. */}
-        <button
-          type="button"
-          onClick={() => setWalked(true)}
-          disabled={walked}
-          aria-label={
-            walked
-              ? "Anchor transaction, both hops walked"
-              : "Walk one hop out from the anchor transaction"
-          }
-          className="group absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full disabled:cursor-default"
+        <span
+          aria-hidden="true"
+          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
           style={{ left: `${ANCHOR.x}%`, top: `${ANCHOR.y}%` }}
         >
           {!walked ? (
@@ -424,31 +407,25 @@ export function TraceStage() {
           ) : null}
           <span
             aria-hidden="true"
-            className={cn(
-              "relative flex size-6 items-center justify-center rounded-full border-2 border-accent bg-[#1a110a]",
-              !walked && "transition-transform group-hover:scale-110",
-            )}
+            className="relative flex size-6 items-center justify-center rounded-full border-2 border-accent bg-[#1a110a]"
           >
             <span className="size-2 rounded-full bg-accent" />
           </span>
           <span className="absolute top-full left-1/2 mt-1.5 -translate-x-1/2 font-mono text-[10px] whitespace-nowrap text-accent">
             anchor
           </span>
-        </button>
+        </span>
 
-        {/* First hop: one button per counterparty, each one able to spend the second hop. */}
+        {/* First hop: the counterparties; the walk spends its second hop on one of them. */}
         {TRACE.filter((node) => node.depth === 1 && walked).map((node, index) => {
           const active = branch === node.id;
           const open = branch === null;
           return (
-            <button
+            <span
               key={node.id}
-              type="button"
-              onClick={() => setBranch(node.id)}
-              disabled={!open}
-              aria-label={`Follow ${node.label ?? node.id} one hop`}
+              aria-hidden="true"
               className={cn(
-                "group absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full disabled:cursor-default",
+                "absolute z-10 -translate-x-1/2 -translate-y-1/2 rounded-full transition-opacity duration-300",
                 TRACE_REVEAL,
                 !open && !active && "opacity-45",
               )}
@@ -461,9 +438,8 @@ export function TraceStage() {
               <span
                 aria-hidden="true"
                 className={cn(
-                  "relative block size-4 rounded-full border-2 bg-canvas",
+                  "relative block size-4 rounded-full border-2 bg-canvas transition-colors",
                   active ? "border-accent" : "border-line-strong",
-                  open && "transition-transform group-hover:scale-125 group-hover:border-accent",
                 )}
               />
               <span
@@ -474,7 +450,7 @@ export function TraceStage() {
               >
                 {node.label}
               </span>
-            </button>
+            </span>
           );
         })}
 
@@ -509,20 +485,6 @@ export function TraceStage() {
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <Button variant="primary" size="sm" onClick={() => setWalked(true)} disabled={walked}>
-          Walk one hop
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setWalked(false);
-            setBranch(null);
-          }}
-          disabled={!walked}
-        >
-          Reset
-        </Button>
         <span className="ml-auto font-mono text-[11px] text-dim">
           hops {hops}/{HOP_BUDGET}
         </span>
@@ -562,8 +524,14 @@ const CLAIMS: readonly Claim[] = [
   },
 ];
 
+/** When, in the stage's time, each claim is checked. */
+const CHECK_AT = [0.15, 0.45, 0.75] as const;
+
 export function VerifyStage() {
-  const [checked, setChecked] = useState<readonly string[]>([]);
+  const time = useStageTime();
+  const checked = CLAIMS.filter((_, index) => time >= (CHECK_AT[index] ?? 1)).map(
+    (claim) => claim.id,
+  );
   const allChecked = checked.length === CLAIMS.length;
   const supported = CLAIMS.filter((claim) => claim.supported).length;
   const rejected = CLAIMS.length - supported;
@@ -571,7 +539,11 @@ export function VerifyStage() {
   return (
     <StageFrame
       label="Verify"
-      hint="Click a claim to check it against what the tools returned."
+      hint={
+        allChecked
+          ? "Every claim was checked against what the tools returned."
+          : "Each claim in the draft is checked against the records the tools returned."
+      }
       status={
         <StageChip tone={allChecked ? "review" : "neutral"} live>
           {allChecked
@@ -589,11 +561,14 @@ export function VerifyStage() {
           {CLAIMS.map((claim) => {
             const done = checked.includes(claim.id);
             return (
-              <button
+              <div
                 key={claim.id}
-                type="button"
-                onClick={() => setChecked((ids) => [...ids, claim.id])}
-                className="flex w-full items-start gap-3 rounded-lg border border-line bg-[#e6e7e5]/[0.02] px-3 py-3 text-left transition-colors hover:border-line-strong hover:bg-[#e6e7e5]/[0.05]"
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors duration-300",
+                  done
+                    ? "border-line-strong bg-[#e6e7e5]/[0.04]"
+                    : "border-line bg-[#e6e7e5]/[0.02]",
+                )}
               >
                 <span
                   aria-hidden="true"
@@ -633,7 +608,7 @@ export function VerifyStage() {
                     </span>
                   ) : null}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -700,24 +675,36 @@ const DOT: Record<CaseEntry["tone"], string> = {
   dim: "bg-dim",
 };
 
+const EVIDENCE: CaseEntry = {
+  id: "evidence",
+  label: "Evidence attached",
+  meta: "2 supported claims · 1 funds path",
+  tone: "dim",
+};
+
+/** When, in the stage's time, the evidence lands and the analyst decides. */
+const EVIDENCE_AT = 0.3;
+const DECIDE_AT = 0.7;
+
 export function DecideStage() {
-  const [log, setLog] = useState<readonly CaseEntry[]>([OPENED]);
-  const [decision, setDecision] = useState<"confirmed" | "dismissed" | null>(null);
+  const time = useStageTime();
+  const decision = time >= DECIDE_AT ? ("confirmed" as const) : null;
   const current = decision ? DECISION[decision] : null;
   const StatusIcon = current ? current.icon : Flag;
-
-  function decide(kind: "confirmed" | "dismissed") {
-    setDecision(kind);
-    setLog((entries) => [
-      ...entries,
-      {
-        id: `${kind}-${entries.length}`,
-        label: DECISION[kind].label,
-        meta: DECISION[kind].meta,
-        tone: DECISION[kind].dot,
-      },
-    ]);
-  }
+  const log: readonly CaseEntry[] = [
+    OPENED,
+    ...(time >= EVIDENCE_AT ? [EVIDENCE] : []),
+    ...(decision
+      ? [
+          {
+            id: decision,
+            label: DECISION[decision].label,
+            meta: DECISION[decision].meta,
+            tone: DECISION[decision].dot,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <StageFrame
@@ -734,27 +721,24 @@ export function DecideStage() {
         Policy suggests: review
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button variant="primary" size="sm" onClick={() => decide("confirmed")}>
-          <Check aria-hidden />
-          Confirm case
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => decide("dismissed")}>
-          <X aria-hidden />
-          Dismiss
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={() => {
-            setLog([OPENED]);
-            setDecision(null);
-          }}
-          disabled={log.length === 1}
-        >
-          Reset
-        </Button>
+      {/* The two choices an analyst has; the one taken lights up. */}
+      <div aria-hidden="true" className="mt-3 flex flex-wrap items-center gap-2">
+        {(["confirmed", "dismissed"] as const).map((kind) => {
+          const Icon = kind === "confirmed" ? Check : X;
+          const taken = decision === kind;
+          return (
+            <span
+              key={kind}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors duration-300",
+                taken ? "border-accent bg-accent text-accent-ink" : "border-line-strong text-dim",
+              )}
+            >
+              <Icon className="size-3.5" />
+              {kind === "confirmed" ? "Confirm case" : "Dismiss"}
+            </span>
+          );
+        })}
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-[#080909]/40 p-3">

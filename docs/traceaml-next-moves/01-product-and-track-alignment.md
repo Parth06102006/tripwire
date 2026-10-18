@@ -5,7 +5,7 @@
 
 ## 1. Product definition
 
-TraceAML is a synthetic-AML investigation workbench. It takes a transaction selected from the frozen replay cohort, retrieves the corresponding model score, queries FalkorDB for transaction relationships, and runs a bounded, evidence-grounded investigation. Based on validated graph findings and deterministic policy, it can open or enrich a local investigation case for human review.
+Tripwire is a synthetic-AML investigation workbench. It takes a transaction selected from the frozen replay cohort, retrieves the corresponding model score, queries FalkorDB for transaction relationships, and runs a bounded, evidence-grounded investigation. Based on validated graph findings and deterministic policy, it can open or enrich a local investigation case for human review.
 
 The product is not a bank-integrated AML system. It does not block real payments, file regulatory reports, or determine criminal guilt. A graph motif is a reason to investigate—not proof of laundering.
 
@@ -47,7 +47,7 @@ These official focus areas are not published as numerical judging weights. This 
 
 Use this counterfactual test:
 
-> If FalkorDB were unavailable or its graph relationships were removed, which TraceAML behavior would disappear or materially change?
+> If FalkorDB were unavailable or its graph relationships were removed, which Tripwire behavior would disappear or materially change?
 
 A strong answer:
 

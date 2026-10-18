@@ -36,7 +36,7 @@ Investigation runtime provides approved tool schemas to agent
 Agent chooses a tool and supplies typed, bounded arguments
         |
         v
-MCP client invokes TraceAML MCP server
+MCP client invokes Tripwire MCP server
         |
         v
 MCP server validates inputs and calls existing graph query module

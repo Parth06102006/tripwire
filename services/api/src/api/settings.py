@@ -66,6 +66,22 @@ class Settings(BaseSettings):
     # set it from validation precision before relying on it. Blank disables it.
     block_threshold: float | None = Field(default=0.999, ge=0.0, le=1.0)
     case_db_path: str = Field(default="data/cases/cases.db")
+
+    # Sign-in (ADR-027). The web app runs Better Auth and issues a signed JWT;
+    # the API only verifies it against the web app's published keys. ``jwt`` is
+    # the default so a deployment cannot be left open by omission; ``off`` is
+    # for local development and disables both sign-in and the usage limits.
+    auth_mode: Literal["jwt", "off"] = Field(default="jwt")
+    # Where the web app publishes its public keys, for example
+    # ``http://web:3000/api/auth/jwks`` on the private network.
+    auth_jwks_url: str | None = Field(default=None)
+    # Must equal the web app's public base URL (BETTER_AUTH_URL): Better Auth
+    # sets it as both the issuer and the audience of every token.
+    auth_issuer: str | None = Field(default=None)
+    auth_audience: str | None = Field(default=None)
+    # Investigations a signed-in user may start. Rolling windows.
+    investigation_limit_hour: int = Field(default=10, ge=1, le=10_000)
+    investigation_limit_day: int = Field(default=20, ge=1, le=100_000)
     # How the LLM agent reaches the graph tools. ``mcp`` routes every tool call
     # through the MCP server boundary; ``direct`` calls the query functions.
     agent_tool_transport: Literal["mcp", "direct"] = Field(default="mcp")
@@ -145,6 +161,9 @@ class Settings(BaseSettings):
         "llm_price_input_per_mtok",
         "llm_price_output_per_mtok",
         "block_threshold",
+        "auth_jwks_url",
+        "auth_issuer",
+        "auth_audience",
         mode="before",
     )
     @classmethod
@@ -153,6 +172,11 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @property
+    def auth_configured(self) -> bool:
+        """True when token verification has everything it needs."""
+        return bool(self.auth_jwks_url and self.auth_issuer and self.auth_audience)
 
     @property
     def llm_configured(self) -> bool:

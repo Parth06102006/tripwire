@@ -1,4 +1,4 @@
-# TraceAML Contracts
+# Tripwire Contracts
 
 This file records shared API and graph contracts. Pydantic models and executable Cypher are the implementation authority; update this document when either changes.
 
@@ -9,6 +9,22 @@ This file records shared API and graph contracts. Pydantic models and executable
 - Transaction IDs and account keys are source-backed identifiers.
 - Target labels and typology truth never appear in inference responses.
 - Errors use standard HTTP status codes and a JSON `detail` value. Graph-dependent operations return `503` when FalkorDB is unavailable.
+
+## Authentication and limits (ADR-027)
+
+The web app signs users in (Better Auth, Google and GitHub, an access list) and issues a short-lived JWT at `GET /api/auth/token`. The browser sends it as `Authorization: Bearer <token>`. The API verifies it against the web app's public keys (`Tripwire_AUTH_JWKS_URL`), requiring a valid signature (EdDSA, ES256 or RS256), `exp`, `iat` and `sub`, and the configured issuer and audience.
+
+- `/api/health` and `/api/benchmarks` are public. Every other route needs a token.
+- No, malformed, expired or wrongly signed token: `401 {"detail": "authentication required"}` with `WWW-Authenticate: Bearer`.
+- Key server unreachable: `503 {"detail": "authentication service unavailable"}`. Never a pass.
+- Who may sign in is decided by the web app (`AUTH_ALLOWED_EMAILS`: addresses, `@domain`, or `*` for anyone). The API trusts any token the web app signs.
+- `Tripwire_AUTH_MODE` is `jwt` (default) or `off`. `off` is for local development: no token is needed and no limits apply. `jwt` refuses to start without `Tripwire_AUTH_JWKS_URL`, `Tripwire_AUTH_ISSUER` and `Tripwire_AUTH_AUDIENCE`.
+- Each signed-in user may start `Tripwire_INVESTIGATION_LIMIT_HOUR` (default 10) investigations in any rolling 3,600 seconds and `Tripwire_INVESTIGATION_LIMIT_DAY` (default 20) in any rolling 86,400. `POST /api/investigations` and `POST /api/investigations/stream` share the allowance. One counts when the investigation starts, whether or not it later succeeds; a request refused before any work (unknown transaction, invalid body, 401, 429) does not count.
+- Over the limit: `429` with `Retry-After` (seconds) and `{"detail": "investigation limit reached: 10 per hour", "window": "hour" | "day", "limit": 10, "retry_after_seconds": 1800}`. When both windows are full the longer wait is reported. On the stream endpoint the 429 is returned before the stream opens.
+
+### `GET /api/me`
+
+Returns `{"auth": "jwt" | "off", "user": {"id", "email", "name"} | null, "usage": {"hour": W, "day": W} | null}` where each window `W` is `{"limit", "used", "remaining", "resets_in_seconds"}` (`resets_in_seconds` is null when nothing is counted). It does not use an allowance.
 
 ## Implemented endpoints
 
@@ -33,7 +49,7 @@ Accepts `limit` from 1-200 and a non-negative `offset`, plus optional filters th
 
 ### `GET /api/benchmarks`
 
-Returns the Iteration 2 detection results under a `models` key, read from `TRACEAML_BASELINE_METRICS_PATH` (default `docs/benchmarks/iteration-2-detection.json`, exported from the frozen test ledger by `ml/experiments/export_api_benchmarks.py` and matching `docs/benchmarks/iteration-2-detection.md`). The models are `iteration1_lgbm` (the frozen Iteration 1 baseline), `c3`, `c2`, and `c1` (the selected model). Each carries `average_precision` for `train`, `validation`, `test`, and `test_bulk_sept_9_10`, the validation threshold with test precision, recall and F1 at it, the 0.1% alert budget result, and per-split counts including `test_bulk_sept_9_10`. When `TRACEAML_GRAPH_METRICS_PATH` is set to an existing run, its model entries (for example the Iteration 1 `lgbm_graph`) are merged in without replacing these; it is unset by default. The `performance` object is loaded from `TRACEAML_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
+Returns the Iteration 2 detection results under a `models` key, read from `Tripwire_BASELINE_METRICS_PATH` (default `docs/benchmarks/iteration-2-detection.json`, exported from the frozen test ledger by `ml/experiments/export_api_benchmarks.py` and matching `docs/benchmarks/iteration-2-detection.md`). The models are `iteration1_lgbm` (the frozen Iteration 1 baseline), `c3`, `c2`, and `c1` (the selected model). Each carries `average_precision` for `train`, `validation`, `test`, and `test_bulk_sept_9_10`, the validation threshold with test precision, recall and F1 at it, the 0.1% alert budget result, and per-split counts including `test_bulk_sept_9_10`. When `Tripwire_GRAPH_METRICS_PATH` is set to an existing run, its model entries (for example the Iteration 1 `lgbm_graph`) are merged in without replacing these; it is unset by default. The `performance` object is loaded from `Tripwire_PERFORMANCE_PATH` and contains the recorded model, API, and FalkorDB latency snapshot plus explicit cost status. It reports measured synthetic benchmark results; it does not expose test labels or individual test outcomes.
 
 ### `POST /api/investigations`
 
@@ -89,7 +105,7 @@ The score is loaded from the target-free replay artifact. Deterministic policy c
 
 Duration semantics (changed in Iteration 2): `query_duration_ms` is the wall-clock time of the whole graph evidence phase, which is what the analyst waits for. Before Iteration 2 it was the sum of the serial tool durations. `tool_durations_ms` lists each executed tool's own measured duration in the fixed order above; pattern entries are absent when the anchor transfer was not returned. Under concurrency the per-tool sum can exceed the wall time.
 
-Errors: a transaction absent from the score artifact returns 404 `transaction not scored`; a scored transaction absent from the graph returns 404 `transaction not found in graph`; an unconfigured or unreachable graph returns 503 `graph unavailable`; a missing score or threshold artifact returns 503; a query exceeding its timeout returns 504 `graph query timed out`; malformed graph evidence returns 500 `graph evidence unavailable`, and a report citing unreturned records returns 500 `evidence validation failed`; invalid request bounds return 422. Error bodies carry only these fixed `detail` strings, never hosts, ports, paths, or exception text. Each graph query uses the server-side timeout `TRACEAML_GRAPH_QUERY_TIMEOUT_MS` (default 5000).
+Errors: a transaction absent from the score artifact returns 404 `transaction not scored`; a scored transaction absent from the graph returns 404 `transaction not found in graph`; an unconfigured or unreachable graph returns 503 `graph unavailable`; a missing score or threshold artifact returns 503; a query exceeding its timeout returns 504 `graph query timed out`; malformed graph evidence returns 500 `graph evidence unavailable`, and a report citing unreturned records returns 500 `evidence validation failed`; invalid request bounds return 422. Error bodies carry only these fixed `detail` strings, never hosts, ports, paths, or exception text. Each graph query uses the server-side timeout `Tripwire_GRAPH_QUERY_TIMEOUT_MS` (default 5000).
 
 ### LLM report agent (optional)
 
@@ -107,7 +123,7 @@ Policy version `v2` adds a deterministic escalation over the model route and the
 
 | Field | Meaning |
 | --- | --- |
-| `route` | `blocked_by_rule` when the score is at or above `TRACEAML_BLOCK_THRESHOLD` (default `0.999`, blank disables the rule), `flagged_for_review` at or above the validation-selected review threshold, otherwise `standard_path` |
+| `route` | `blocked_by_rule` when the score is at or above `Tripwire_BLOCK_THRESHOLD` (default `0.999`, blank disables the rule), `flagged_for_review` at or above the validation-selected review threshold, otherwise `standard_path` |
 | `review_threshold`, `block_threshold` | The thresholds applied |
 | `agent_status` | `rated` (a verified LLM report supplied a level), `unavailable` (a flagged transaction without one), `not_applicable` |
 | `risk_level` | The verified level, or null |
@@ -139,7 +155,7 @@ Every investigation response adds three fields. `outcome` is one of `evidence_fo
 
 `tool_trace` lists each graph tool call: `tool_run_id`, `tool` (`trace_funds`, `inspect_counterparties`, `detect_flow_patterns`), `transport` (`direct` or `mcp`), `origin` (`policy` for the deterministic context and fixed calls, `model` for calls the agent selected), `arguments` (bounded scalars; the flow pattern is `flow_pattern`), `outcome` (the outcome values plus `invalid_input`), `status`, `duration_ms`, `result_count`, `path_count`, and `truncated`. It records observable tool facts only, never model reasoning.
 
-The LLM agent (`use_llm: true`) reaches the graph tools through an MCP server (`api.mcp_graph`) and an in-process MCP client session when `TRACEAML_AGENT_TOOL_TRANSPORT=mcp` (the default). The server exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`, delegates to the existing parameterized queries in `graph.queries`, and rejects out-of-range arguments before any database call. `TRACEAML_AGENT_TOOL_TRANSPORT=direct` calls the same functions without the protocol. The deterministic path always uses direct calls. `python -m api.mcp_graph` serves the same tools over stdio for external MCP clients.
+The LLM agent (`use_llm: true`) reaches the graph tools through an MCP server (`api.mcp_graph`) and an in-process MCP client session when `Tripwire_AGENT_TOOL_TRANSPORT=mcp` (the default). The server exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns`, delegates to the existing parameterized queries in `graph.queries`, and rejects out-of-range arguments before any database call. `Tripwire_AGENT_TOOL_TRANSPORT=direct` calls the same functions without the protocol. The deterministic path always uses direct calls. `python -m api.mcp_graph` serves the same tools over stdio for external MCP clients.
 
 ### Controlled case action
 
@@ -151,7 +167,7 @@ The LLM agent (`use_llm: true`) reaches the graph tools through an MCP server (`
 
 ## Graph contract
 
-Graph name: `traceaml`.
+Graph name: `Tripwire`.
 
 | Label | Required properties | Notes |
 | --- | --- | --- |
@@ -170,7 +186,7 @@ Create property indexes before applying unique node constraints. FalkorDB unique
 
 ## Case review contract
 
-Cases persist in SQLite at `TRACEAML_CASE_DB_PATH` (default `data/cases/cases.db`, relative to the repository root; ignored by Git). The review history is append-only: database triggers reject updates and deletes of history rows and deletes of cases.
+Cases persist in SQLite at `Tripwire_CASE_DB_PATH` (default `data/cases/cases.db`, relative to the repository root; ignored by Git). The review history is append-only: database triggers reject updates and deletes of history rows and deletes of cases.
 
 `GET /api/cases?status=&limit=50&offset=0` returns `items`, `total`, `limit` (1-100), and `offset`, most recently updated first. `status` filters by `suspected`, `under_review`, `confirmed`, or `dismissed`.
 
@@ -180,7 +196,7 @@ Cases persist in SQLite at `TRACEAML_CASE_DB_PATH` (default `data/cases/cases.db
 
 `POST /api/cases/{case_id}/review` accepts `{"action": "confirm" | "dismiss", "reviewer_id": "...", "pattern_type": null, "notes": null}`. Only explicit analyst action changes status: `confirm` moves the case to `confirmed`, and `dismiss` moves it to `dismissed`. Both are terminal; reviewing a confirmed or dismissed case returns 409 and never overwrites history. A dismissal preserves the transaction history and audit record and does not erase graph data. Nothing is written to the graph yet; provenance-backed case or ring links in the graph remain future work.
 
-Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `opened_by`, `created_at`, `updated_at`, `history`, and `evidence`. Each `evidence` entry (append-only, from an agent or policy action) has `evidence_id`, `review_id`, `action` (`open_case` or `enrich_case`), `proposed_by`, `investigation_id`, `reason`, `evidence_refs`, `tool_run_ids`, `tool_trace`, the `risk_score`, `decision`, and `policy_version` snapshot, and `timestamp`. It stores identifier references and the tool trace, never transaction records or labels. Cases opened by an action have `opened_by` of `traceaml-agent` or `traceaml-policy` and stay `suspected`; only explicit analyst review confirms or dismisses them. Each history entry has `review_id`, `action` (`open`, `enrich`, `confirm`, or `dismiss`), `reviewer_id`, `pattern_type`, `notes`, and `timestamp`, oldest first. `under_review` is accepted as a filter value but no current transition produces it.
+Case response fields: `case_id`, `transaction_id`, `status`, `risk_score`, `opened_by`, `created_at`, `updated_at`, `history`, and `evidence`. Each `evidence` entry (append-only, from an agent or policy action) has `evidence_id`, `review_id`, `action` (`open_case` or `enrich_case`), `proposed_by`, `investigation_id`, `reason`, `evidence_refs`, `tool_run_ids`, `tool_trace`, the `risk_score`, `decision`, and `policy_version` snapshot, and `timestamp`. It stores identifier references and the tool trace, never transaction records or labels. Cases opened by an action have `opened_by` of `Tripwire-agent` or `Tripwire-policy` and stay `suspected`; only explicit analyst review confirms or dismisses them. Each history entry has `review_id`, `action` (`open`, `enrich`, `confirm`, or `dismiss`), `reviewer_id`, `pattern_type`, `notes`, and `timestamp`, oldest first. `under_review` is accepted as a filter value but no current transition produces it.
 
 ## Approved graph tools
 
@@ -214,6 +230,6 @@ The source timestamp has minute resolution. All rows at one timestamp belong to 
 
 ### Point-in-time graph feature sidecar
 
-`traceaml-build-graph-features-batch` (default, vectorized from Parquet) and `traceaml-build-graph-features` (FalkorDB cross-check) write the same target-free Parquet sidecar keyed by `transaction_id`, with row-for-row identical values. Its exact columns are the transaction ID plus `gfeat_sender_out_24h`, `gfeat_sender_in_24h`, `gfeat_receiver_out_24h`, `gfeat_receiver_in_24h`, and `gfeat_prior_reverse_flow`. Both builders read only `transaction_id`, `timestamp`, `sender_account_key`, and `receiver_account_key`; they never read target, split, or pattern columns. DuckDB sorts those fields by `(timestamp, transaction_id)`, and the FalkorDB builder queries graph state before applying each complete minute. Recent counterparties use the inclusive 24-hour lower bound and strict earlier-minute upper bound. Reverse flow means a prior directed edge from receiver to sender. The FalkorDB builder uses a separate `FAccount`/`FLOW` graph with an account-key range index; the batch builder computes the same rules with columnar interval counting and rejects null projected values. Both record source hash, row reconciliation, feature definitions, ordering, and timings in a manifest.
+`Tripwire-build-graph-features-batch` (default, vectorized from Parquet) and `Tripwire-build-graph-features` (FalkorDB cross-check) write the same target-free Parquet sidecar keyed by `transaction_id`, with row-for-row identical values. Its exact columns are the transaction ID plus `gfeat_sender_out_24h`, `gfeat_sender_in_24h`, `gfeat_receiver_out_24h`, `gfeat_receiver_in_24h`, and `gfeat_prior_reverse_flow`. Both builders read only `transaction_id`, `timestamp`, `sender_account_key`, and `receiver_account_key`; they never read target, split, or pattern columns. DuckDB sorts those fields by `(timestamp, transaction_id)`, and the FalkorDB builder queries graph state before applying each complete minute. Recent counterparties use the inclusive 24-hour lower bound and strict earlier-minute upper bound. Reverse flow means a prior directed edge from receiver to sender. The FalkorDB builder uses a separate `FAccount`/`FLOW` graph with an account-key range index; the batch builder computes the same rules with columnar interval counting and rejects null projected values. Both record source hash, row reconciliation, feature definitions, ordering, and timings in a manifest.
 
 The baseline trainer accepts this sidecar only through `--graph-features`. It requires the exact target-free schema, unique non-null IDs, integer features, and a binary reverse-flow flag. The offline evaluator joins by transaction ID and fails if any split loses rows; labels and split assignments continue to come only from the offline evaluation tables. The `lgbm_graph` arm shares the baseline's frozen split, threshold-selection rules, categorical encoding, and alert budget.

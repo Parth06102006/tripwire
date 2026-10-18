@@ -7,6 +7,8 @@ import type { NextConfig } from "next";
 const standalone = process.env.NEXT_OUTPUT === "standalone";
 
 const nextConfig: NextConfig = {
+  // A second build can sit beside a running dev server by setting this; unset it is .next.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   ...(standalone
     ? {
         output: "standalone" as const,
@@ -19,7 +21,9 @@ const nextConfig: NextConfig = {
   // origin is fixed when the image is built.
   async rewrites() {
     const apiOrigin = process.env.TRACEAML_API_ORIGIN ?? "http://127.0.0.1:8000";
-    return [{ source: "/api/:path*", destination: `${apiOrigin}/api/:path*` }];
+    // /api/auth/* is this app's own sign-in (Better Auth). A rewrite is matched
+    // before dynamic routes, so it has to leave those paths alone.
+    return [{ source: "/api/:path((?!auth(?:/|$)).*)", destination: `${apiOrigin}/api/:path*` }];
   },
 };
 

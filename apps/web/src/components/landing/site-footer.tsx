@@ -2,6 +2,7 @@
 
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import type { PointerEvent } from "react";
 
 import { useHealth } from "@/hooks/use-health";
 import { cn } from "@/lib/cn";
@@ -24,8 +25,40 @@ const PRINCIPLE_LINKS = [
   { label: "Graph evidence", href: "#product" },
   { label: "Typologies", href: "#typologies" },
   { label: "Bounded Cypher", href: "#sandbox" },
-  { label: "Benchmark protocol", href: "#benchmarks" },
+  { label: "How it works", href: "#how-it-works" },
 ] as const;
+
+const WORDMARK_TYPE =
+  "font-sans text-[21.5cqw] leading-[0.8] font-black tracking-[-0.05em] uppercase";
+
+/** Keep the glow under the pointer: the gradient's centre is set in CSS variables. */
+function followPointer(event: PointerEvent<HTMLDivElement>) {
+  const box = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty("--glow-x", `${event.clientX - box.left}px`);
+  event.currentTarget.style.setProperty("--glow-y", `${event.clientY - box.top}px`);
+}
+
+/**
+ * The giant TRIPWIRE. At rest it is a dark mark on the dark footer; on hover an
+ * ember gradient fades in through the letters and follows the pointer. The
+ * gradient is a second copy of the word clipped to its glyphs, laid exactly over
+ * the first, so only its opacity animates.
+ */
+function Wordmark() {
+  return (
+    <div onPointerMove={followPointer} className="group relative [--glow-x:50%] [--glow-y:50%]">
+      <div className={cn(WORDMARK_TYPE, "text-zinc-900/80")}>Tripwire</div>
+      <div
+        className={cn(
+          WORDMARK_TYPE,
+          "pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_var(--glow-x)_var(--glow-y),#ffe0b8_0%,#f8a55a_14%,#f28c38_30%,#c2410c_55%,#3b1a0c_85%)] bg-clip-text text-transparent opacity-0 transition-opacity duration-500 ease-out group-hover:opacity-100 motion-reduce:transition-none",
+        )}
+      >
+        Tripwire
+      </div>
+    </div>
+  );
+}
 
 const LINK_CLASS = "transition-colors hover:text-white";
 
@@ -182,9 +215,7 @@ export default function SiteFooter() {
           aria-hidden="true"
           className="[container-type:inline-size] overflow-hidden border-t border-white/10 pt-8 select-none"
         >
-          <div className="font-sans text-[21.5cqw] leading-[0.8] font-black tracking-[-0.05em] text-zinc-900/80 uppercase transition-colors hover:text-zinc-800">
-            Tripwire
-          </div>
+          <Wordmark />
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-6 text-[11px] text-zinc-600 sm:flex-row">

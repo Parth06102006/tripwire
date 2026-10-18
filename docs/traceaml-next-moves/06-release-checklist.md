@@ -90,7 +90,7 @@ Test the README on a fresh checkout or clean environment, not just the developer
 - [ ] Agent opt-in and deterministic fallback are visible.
 - [ ] Empty, loading, API unavailable, graph unavailable and tool-timeout states work.
 - [ ] “Synthetic replay” is visible in the product.
-- [ ] No UI text implies that a score proves criminal intent or that TraceAML blocks real transactions.
+- [ ] No UI text implies that a score proves criminal intent or that Tripwire blocks real transactions.
 - [ ] Final review performed at the actual recording/demo viewport size.
 
 ## 7. Submission assets

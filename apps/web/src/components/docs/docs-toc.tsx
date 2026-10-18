@@ -10,15 +10,15 @@ export interface TocItem {
 }
 
 export const DOC_SECTIONS: TocItem[] = [
-  { id: "introduction", title: "1. The Money Laundering Challenge", level: 2 },
-  { id: "graph-foundation", title: "2. The Graph Representation Model", level: 2 },
-  { id: "end-to-end-architecture", title: "3. End-to-End System Pipeline", level: 2 },
-  { id: "key-typologies", title: "4. The 4 AML Typology Patterns", level: 2 },
-  { id: "detection-scoring", title: "5. LightGBM & Decision Invariants", level: 2 },
-  { id: "graph-traversal", title: "6. FalkorDB & Cypher Traversals", level: 2 },
-  { id: "llm-agent", title: "7. Autonomous LLM Agent & MCP", level: 2 },
-  { id: "analyst-workbench", title: "8. The Analyst Workbench Guide", level: 2 },
-  { id: "glossary", title: "9. Technical Glossary & Key Terms", level: 2 },
+  { id: "introduction", title: "1. The Bank and the Money-Flow Network", level: 2 },
+  { id: "ml-model", title: "2. Layer One: The Model That Scores the Stream", level: 2 },
+  { id: "agent-pass", title: "3. Layer Two: The Agent Pass on Flagged Reviews", level: 2 },
+  { id: "graph-foundation", title: "4. What the Agent Reads: The Graph", level: 2 },
+  { id: "key-typologies", title: "5. The AML Patterns the Graph Exposes", level: 2 },
+  { id: "end-to-end-architecture", title: "6. The Full Pipeline, End to End", level: 2 },
+  { id: "analyst-workbench", title: "7. The Analyst Workbench Guide", level: 2 },
+  { id: "glossary", title: "8. Technical Glossary & Key Terms", level: 2 },
+  { id: "further-reading", title: "9. Further Reading: Field Notes", level: 2 },
 ];
 
 export function DocsToc({ activeId }: { activeId?: string }) {

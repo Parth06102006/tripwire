@@ -21,6 +21,8 @@ import {
 
 import { cn } from "@/lib/cn";
 
+import { TeaserProgress } from "./teaser-progress";
+
 /**
  * StickyTeaserScroll
  *
@@ -113,7 +115,16 @@ function useIsDesktop(): boolean | null {
  * Index-based swap: the incoming panel fades and scales in, the outgoing one
  * fades and shrinks. Images fill their frame; a `visual` keeps its own layout.
  */
-function SwapLayer({ item, reduced }: { item: StickyTeaserItem; reduced: boolean }) {
+function SwapLayer({
+  item,
+  reduced,
+  target,
+}: {
+  item: StickyTeaserItem;
+  reduced: boolean;
+  /** The item's teaser, whose scroll progress the panel can play to. */
+  target: RefObject<HTMLElement | null>;
+}) {
   const transition: Transition = reduced
     ? { duration: 0 }
     : { duration: SWAP_DURATION, ease: EASE };
@@ -127,7 +138,11 @@ function SwapLayer({ item, reduced }: { item: StickyTeaserItem; reduced: boolean
     className: "absolute inset-0 size-full",
   };
   if (item.visual) {
-    return <motion.div {...motionProps}>{item.visual}</motion.div>;
+    return (
+      <motion.div {...motionProps}>
+        <TeaserProgress target={target}>{item.visual}</TeaserProgress>
+      </motion.div>
+    );
   }
   if (!item.image) return null;
   return (
@@ -170,7 +185,7 @@ function ScrubbedLayer({
   if (item.visual) {
     return (
       <motion.div aria-hidden={!active} style={style} className="absolute inset-0 size-full">
-        {item.visual}
+        <TeaserProgress target={target}>{item.visual}</TeaserProgress>
       </motion.div>
     );
   }
@@ -299,7 +314,11 @@ export function StickyTeaserScroll({
                 )}
               >
                 {item.visual ? (
-                  <div className="size-full">{item.visual}</div>
+                  <div className="size-full">
+                    <TeaserProgress target={teaserRefs[index] as RefObject<HTMLElement | null>}>
+                      {item.visual}
+                    </TeaserProgress>
+                  </div>
                 ) : item.image ? (
                   /* eslint-disable-next-line @next/next/no-img-element -- remote or static, sized by its frame */
                   <img
@@ -384,7 +403,14 @@ export function StickyTeaserScroll({
               ))
             ) : (
               <AnimatePresence initial={false}>
-                {current ? <SwapLayer key={current.id} item={current} reduced={reduced} /> : null}
+                {current ? (
+                  <SwapLayer
+                    key={current.id}
+                    item={current}
+                    reduced={reduced}
+                    target={teaserRefs[safeActive] as RefObject<HTMLElement | null>}
+                  />
+                ) : null}
               </AnimatePresence>
             )}
           </div>

@@ -6,6 +6,9 @@ import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import type { ReviewBounds } from "@/hooks/use-agent-review";
+import { formatWait } from "@/lib/api-client";
+import type { Usage } from "@/lib/api-schemas";
+import { isExhausted, secondsUntilNext } from "@/lib/usage";
 import { formatWindow } from "@/lib/formatters";
 
 const HOPS = [1, 2, 3] as const;
@@ -22,6 +25,7 @@ export function Composer({
   pending,
   hasRun,
   llmConfigured,
+  usage,
 }: {
   bounds: ReviewBounds;
   onChange: (bounds: ReviewBounds) => void;
@@ -32,8 +36,13 @@ export function Composer({
   pending: number;
   hasRun: boolean;
   llmConfigured: boolean;
+  /** Remaining investigations; null or undefined when sign-in is off or not loaded yet. */
+  usage?: Usage | null;
 }) {
   const id = useId();
+  const exhausted = isExhausted(usage);
+  const wait = secondsUntilNext(usage);
+  const blockedFor = exhausted && wait !== null ? formatWait(wait) : null;
   return (
     <form
       className="border-t border-border bg-sidebar px-4 py-3"
@@ -110,12 +119,27 @@ export function Composer({
               <Square /> Stop
             </Button>
           ) : (
-            <Button type="submit" size="sm" variant="primary">
+            <Button type="submit" size="sm" variant="primary" disabled={exhausted}>
               {hasRun ? <RotateCw /> : <Play />} {hasRun ? "Review again" : "Start review"}
             </Button>
           )}
         </div>
       </div>
+      {usage ? (
+        <p
+          data-testid="usage"
+          role={exhausted ? "alert" : undefined}
+          className={
+            exhausted ? "mt-2 text-[11px] text-warning" : "mt-2 text-[11px] text-fg-secondary"
+          }
+        >
+          {exhausted
+            ? `Investigation limit reached. ${blockedFor ? `Next one in ${blockedFor}. ` : ""}`
+            : null}
+          {usage.hour.remaining} of {usage.hour.limit} left this hour, {usage.day.remaining} of{" "}
+          {usage.day.limit} left today.
+        </p>
+      ) : null}
       <p className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-fg-muted">
         <span>
           {bounds.use_llm && !llmConfigured

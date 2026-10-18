@@ -61,7 +61,7 @@ Iteration 1 frozen baseline record:
   `4bf0ff46191234f3eaa803c49e15ea9071735156085f095c3a25386f06fe2e28`.
 - Features manifest: sha256
   `fa47a2c8a9ef23f9741e42367e0ca95be49f9df8e2b2443e5320c4f5db999658`.
-- Evaluator version: `ml.baselines` (`traceaml-train-baselines`) as recorded in
+- Evaluator version: `ml.baselines` (`Tripwire-train-baselines`) as recorded in
   the same run directory; the Iteration 2 metric set re-analysis is test-ledger
   row 1 (`kind`: re-analysis of existing frozen test scores, no training).
 - Cohort: frozen chronological test split, 761,639 rows, 1,561 positives

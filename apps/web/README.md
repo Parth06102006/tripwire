@@ -59,6 +59,23 @@ src/lib/api-client.ts       Typed fetch client and error wording
 src/lib/graph/              Graph model, deterministic layout, React Flow mapping
 ```
 
+## Sign-in
+
+Better Auth (`src/lib/auth/`) signs users in with Google and GitHub. `src/proxy.ts` redirects visitors without a session cookie, the workbench layout validates the session, and the browser asks `/api/auth/token` for a 15 minute token that `authorizedFetch` adds to every API call. The landing page and `/login` are public.
+
+| Variable                                                                               | Notes                                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_MODE`                                                                            | `oauth` (default), `dev` (adds an email and password form) or `off`. `dev` and `off` are refused in production                                                  |
+| `BETTER_AUTH_URL`                                                                      | The public base URL. Becomes the token issuer and audience, so the API's `TRACEAML_AUTH_ISSUER` and `TRACEAML_AUTH_AUDIENCE` must equal it. https in production |
+| `BETTER_AUTH_SECRET`                                                                   | 32 characters or more                                                                                                                                           |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | A provider is enabled when both of its values are set                                                                                                           |
+| `AUTH_ALLOWED_EMAILS`                                                                  | Comma separated addresses and `@domain` entries. `*` lets anyone with a verified email in (a public demo). Empty allows nobody                                                                                            |
+| `AUTH_DB_PATH`                                                                         | The sign-in SQLite file. Default `data/auth/auth.db`                                                                                                            |
+
+Local development needs no credentials: put `AUTH_MODE=off` in `apps/web/.env.local` and set `TRACEAML_AUTH_MODE=off` for the API. To try the whole flow locally, run the web app with `AUTH_MODE=dev`, a secret, `AUTH_ALLOWED_EMAILS`, `BETTER_AUTH_URL` set to its own address, and the API with `TRACEAML_AUTH_MODE=jwt`, `TRACEAML_AUTH_JWKS_URL=<web>/api/auth/jwks` and the same issuer and audience.
+
+The end-to-end tests run with `AUTH_MODE=off` and an API started with `TRACEAML_AUTH_MODE=off`.
+
 ## Sticky teaser scroll
 
 `src/components/ui/sticky-teaser-scroll.tsx` is a reusable split-screen section: teasers scroll on one side while one panel stays pinned on the other and swaps to the active teaser. A panel is either a static `image` or a `visual`, any node. The landing page uses it for "How it works" (`src/components/landing/how-it-works.tsx`) with the four interactive stages from `src/components/landing/how-it-works-stages.tsx`; `/demo/sticky-teaser` shows it with picsum photos (`?side=left`, `?scrubbed=1`).

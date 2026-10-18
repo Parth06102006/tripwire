@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.auth import get_current_user
 from api.cases.schemas import (
     CaseCreateRequest,
     CaseItem,
@@ -18,7 +19,9 @@ from api.cases.service import CaseService
 from api.dependencies import get_case_session, get_score_repository
 from api.scores import ScoreRepository
 
-router = APIRouter(prefix="/api/cases", tags=["cases"])
+router = APIRouter(
+    prefix="/api/cases", tags=["cases"], dependencies=[Depends(get_current_user)]
+)
 
 MAX_CASE_PAGE = 100
 

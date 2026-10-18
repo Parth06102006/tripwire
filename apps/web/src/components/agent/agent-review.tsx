@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Composer } from "@/components/agent/composer";
 import { Transcript } from "@/components/agent/transcript";
@@ -28,8 +29,11 @@ import { Button } from "@/components/ui/button";
 import { useAgentReview, DEFAULT_REVIEW_BOUNDS, type ReviewBounds } from "@/hooks/use-agent-review";
 import { useAlerts } from "@/hooks/use-alerts";
 import { useHealth } from "@/hooks/use-health";
+import { useMe } from "@/hooks/use-me";
 import { batchNodeIds, type ToolItem } from "@/lib/agent/session";
 import type { ModelRoute } from "@/lib/api-schemas";
+import { queryKeys } from "@/lib/query-client";
+import { isExhausted } from "@/lib/usage";
 import { cn } from "@/lib/cn";
 import { formatInteger, formatScore } from "@/lib/formatters";
 import type { Selection } from "@/lib/graph/flow";
@@ -50,6 +54,8 @@ const ROUTE_BADGE: Record<ModelRoute, { label: string; tone: "critical" | "revie
 export function AgentReview({ transactionId }: { transactionId: string }) {
   const review = useAgentReview(transactionId);
   const health = useHealth();
+  const me = useMe();
+  const queryClient = useQueryClient();
   const [bounds, setBounds] = useState<ReviewBounds>(DEFAULT_REVIEW_BOUNDS);
   const [selection, setSelection] = useState<Selection>(null);
   const [showEvidence, setShowEvidence] = useState(false);
@@ -73,6 +79,13 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
     currentIndex >= 0 && currentIndex < alertItems.length - 1 ? alertItems[currentIndex + 1] : null;
 
   const { state, streaming, pending, start, stop, showAll } = review;
+  const exhausted = isExhausted(me.data?.usage);
+
+  // A review spends one allowance when it starts, so the count is read again
+  // whenever one starts or ends, including a refusal.
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+  }, [streaming, queryClient]);
   const { graph, positions, latest, items, runs } = state;
   const verifiedIds = useMemo(() => verifiedTransactionIds(latest?.report), [latest]);
   const pathsById = useMemo(
@@ -224,7 +237,7 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
                     <CasePanel
                       transactionId={transactionId}
                       latestAction={latest?.action ?? null}
-                      canRunGate={!streaming}
+                      canRunGate={!streaming && !exhausted}
                       gateRunning={streaming && lastRun?.request.act === true}
                       onRunGate={runGate}
                     />
@@ -245,6 +258,7 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
           pending={pending}
           hasRun={runs.length > 0}
           llmConfigured={health.data?.llm === "configured"}
+          usage={me.data?.usage}
         />
       </section>
 
@@ -293,6 +307,7 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
                     <Button
                       size="sm"
                       onClick={() => start(bounds)}
+                      disabled={exhausted}
                       className="inline-flex items-center gap-1.5"
                     >
                       <Play className="size-3.5" aria-hidden />

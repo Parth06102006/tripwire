@@ -38,6 +38,9 @@ ENV NODE_ENV=production \
     PORT=3000
 
 RUN useradd --uid 1001 --create-home webuser
+# Sign-in accounts and sessions (a volume in compose). Created here so the volume
+# is initialised with the right owner.
+RUN mkdir -p /app/data/auth && chown -R webuser:webuser /app/data
 
 # The standalone tree mirrors the workspace; static assets are copied beside it.
 COPY --from=builder --chown=webuser:webuser /src/apps/web/.next/standalone ./
