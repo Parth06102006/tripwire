@@ -45,7 +45,6 @@ RUN mkdir -p /app/data/auth && chown -R webuser:webuser /app/data
 # The standalone tree mirrors the workspace; static assets are copied beside it.
 COPY --from=builder --chown=webuser:webuser /src/apps/web/.next/standalone ./
 COPY --from=builder --chown=webuser:webuser /src/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder --chown=webuser:webuser /src/apps/web/public ./apps/web/public
 
 USER webuser
 EXPOSE 3000
