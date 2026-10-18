@@ -1,4 +1,4 @@
-"""Point-in-time FalkorDB graph feature extraction for TraceAML.
+"""Point-in-time FalkorDB graph feature extraction for Tripwire.
 
 Builds past-only structural features for every source transaction without
 changing the main transaction-evidence graph: all intermediate state lives

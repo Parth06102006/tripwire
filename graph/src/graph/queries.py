@@ -1,4 +1,4 @@
-"""Bounded, parameterized investigation queries for TraceAML.
+"""Bounded, parameterized investigation queries for Tripwire.
 
 Approved tools: ``trace_funds``, ``inspect_counterparties``, and
 ``detect_flow_patterns``. Every query is parameterized (no value

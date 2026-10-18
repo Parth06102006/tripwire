@@ -1,7 +1,7 @@
 [project]
 name = "traceaml-api"
 version = "0.1.0"
-description = "TraceAML FastAPI service: contracts, replay orchestration, deterministic policy."
+description = "Tripwire FastAPI service: contracts, replay orchestration, deterministic policy."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

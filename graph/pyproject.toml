@@ -1,7 +1,7 @@
 [project]
 name = "traceaml-graph"
 version = "0.1.0"
-description = "TraceAML FalkorDB graph layer: idempotent ingestion and bounded investigation queries."
+description = "Tripwire FalkorDB graph layer: idempotent ingestion and bounded investigation queries."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

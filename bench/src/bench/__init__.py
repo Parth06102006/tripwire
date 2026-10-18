@@ -1,1 +1,1 @@
-"""TraceAML benchmark suite: model, API, capacity, graph tool, and cost workloads."""
+"""Tripwire benchmark suite: model, API, capacity, graph tool, and cost workloads."""

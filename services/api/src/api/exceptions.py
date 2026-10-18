@@ -1,4 +1,4 @@
-"""Typed domain errors and centralized HTTP mapping for the TraceAML API.
+"""Typed domain errors and centralized HTTP mapping for the Tripwire API.
 
 Every domain error carries a fixed, public ``detail`` string and status code.
 Handlers return only that string, so hosts, ports, file paths, and upstream

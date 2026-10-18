@@ -21,7 +21,7 @@ const mono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "TraceAML", template: "%s | TraceAML" },
+  title: { default: "Tripwire", template: "%s | Tripwire" },
   description: "Graph-backed AML alert investigation over a synthetic IBM AMLworld replay.",
 };
 

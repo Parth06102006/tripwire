@@ -56,8 +56,8 @@ The jump from validation AP about 0.15 (Iteration 1) to about 0.61 needed scruti
    - Label or split columns in the input fail closed, and sub-minute timestamps are rejected.
    - Perturbing earlier rows does change history features, so the invariance tests are not vacuous.
    - A brute-force Python reference matches velocity counts, windowed distinct counts, pair/reverse counts, 3-cycle closures, same-currency inflow sums, and recency on sampled rows.
-2. **Real-data truncation audit** (`Tripwire-experiment truncation-check`, `features/truncation-check.json`): rebuilding all families from rows up to `2022-09-09 03:16` only (every test row removed) gives identical values on all 76 columns for all 4,316,706 train and validation rows.
-3. **Real-data perturbation audit** (`Tripwire-experiment perturbation-check`): for randomly sampled busy minutes `m`, the input keeps:
+2. **Real-data truncation audit** (`traceaml-experiment truncation-check`, `features/truncation-check.json`): rebuilding all families from rows up to `2022-09-09 03:16` only (every test row removed) gives identical values on all 76 columns for all 4,316,706 train and validation rows.
+3. **Real-data perturbation audit** (`traceaml-experiment perturbation-check`): for randomly sampled busy minutes `m`, the input keeps:
    - every row before `m`, unchanged;
    - a random half of the rows at `m` (the other half, same-minute peers, are deleted);
    - the next 7 days of rows rewritten: about 30% dropped, receivers swapped with the next row's receiver, amounts multiplied by 7.
@@ -310,36 +310,36 @@ All state updates must be applied after the whole minute is scored, to preserve 
 
 ## Reproduction
 
-Run from the repository root. Outputs go to the ignored artifact directory. The experiment runner is the `Tripwire-experiment` console script in `ml/`.
+Run from the repository root. Outputs go to the ignored artifact directory. The experiment runner is the `traceaml-experiment` console script in `ml/`.
 
 ```sh
 RUN=artifacts/runs/hi-small-v8/iteration-2-detection
 DATA=data/processed/hi-small-v8
 
-uv run --directory ml Tripwire-experiment features \
+uv run --directory ml traceaml-experiment features \
   --source-parquet ../$DATA/transactions.parquet \
   --split-manifest ../$DATA/split-manifest.json \
   --accounts-csv ../data/raw/hi-small/HI-Small_accounts.csv \
   --output-dir ../$RUN/features
 
-uv run --directory ml Tripwire-experiment validate \
+uv run --directory ml traceaml-experiment validate \
   --features-dir ../$RUN/features --prepared-parquet ../$DATA/transactions.parquet \
   --graph-features ../$DATA/graph-features-batch.parquet \
   --grid experiments/iteration2_grid.json --output-dir ../$RUN --skip-done
 
 # Pre-declared candidates only (ml/experiments/iteration2_candidates.json); each appends to the test ledger.
-uv run --directory ml Tripwire-experiment test \
+uv run --directory ml traceaml-experiment test \
   --features-dir ../$RUN/features --prepared-parquet ../$DATA/transactions.parquet \
   --grid experiments/iteration2_grid.json --output-dir ../$RUN --candidate s1_all_reg_neg100
 
-uv run --directory ml Tripwire-experiment truncation-check \
+uv run --directory ml traceaml-experiment truncation-check \
   --features-dir ../$RUN/features --prepared-parquet ../$DATA/transactions.parquet \
   --cutoff "2022-09-09 03:16"
-uv run --directory ml Tripwire-experiment perturbation-check \
+uv run --directory ml traceaml-experiment perturbation-check \
   --features-dir ../$RUN/features --prepared-parquet ../$DATA/transactions.parquet \
   --cutoff "2022-09-09 03:16" --sample-minutes 3
 
-uv run --directory ml Tripwire-experiment publish \
+uv run --directory ml traceaml-experiment publish \
   --features-dir ../$RUN/features --output-dir ../$RUN --candidate s1_all_reg_neg100
 ```
 
@@ -353,6 +353,6 @@ Under `artifacts/runs/hi-small-v8/iteration-2-detection/`:
 - `candidates/<name>/` with `model.txt`, `config.json` (threshold, category mappings, hashes), `metrics.json`, `test_scores.parquet` (offline, includes labels), and `validation_scores.parquet`
 - `inference_scores.parquet` (`transaction_id`, `timestamp`, `score`; 761,639 rows; no labels), `inference_scores-manifest.json`, and `api_threshold_config.json` (`thresholds.lgbm = 0.474807`)
 
-To switch the replay API to the Iteration 2 model, set `Tripwire_SCORE_ARTIFACT` to the new `inference_scores.parquet` and `Tripwire_BASELINE_CONFIG_PATH` to `api_threshold_config.json`. Leave `Tripwire_SCORE_MODEL=lgbm`.
+To switch the replay API to the Iteration 2 model, set `TRACEAML_SCORE_ARTIFACT` to the new `inference_scores.parquet` and `TRACEAML_BASELINE_CONFIG_PATH` to `api_threshold_config.json`. Leave `TRACEAML_SCORE_MODEL=lgbm`.
 
 To serve these results in the API and the performance screen without the local artifacts, run `python -I ml/experiments/export_api_benchmarks.py` from the repository root. It reads the test ledger and the Iteration 1 baseline metrics and writes `docs/benchmarks/iteration-2-detection.json`, the file `GET /api/benchmarks` serves by default.

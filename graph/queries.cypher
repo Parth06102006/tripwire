@@ -1,4 +1,4 @@
-// TraceAML bounded investigation queries (declarative reference).
+// Tripwire bounded investigation queries (declarative reference).
 //
 // Generated from graph/src/graph/queries.py, which is the executable
 // authority; tests/test_queries.py asserts this file contains every

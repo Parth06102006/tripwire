@@ -1,4 +1,4 @@
-# TraceAML developer tasks. Recipes are plain commands so they run under both
+# Tripwire developer tasks. Recipes are plain commands so they run under both
 # Windows cmd and POSIX sh. Run `make help` for the target list.
 
 PARQUET ?= data/processed/hi-small-v8/transactions.parquet
@@ -35,7 +35,7 @@ LIMIT_ARG = $(if $(LIMIT),--limit $(LIMIT))
 	test test-ml test-graph test-api test-bench test-web lint lint-web lint-py build check bench bench-quick
 
 help:
-	@echo TraceAML make targets
+	@echo Tripwire make targets
 	@echo   setup          Create .env and install web and Python dependencies
 	@echo   up / down      Start or stop the local FalkorDB container
 	@echo   logs           Follow FalkorDB logs

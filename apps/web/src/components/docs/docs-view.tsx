@@ -157,7 +157,7 @@ export function DocsView() {
                 </DocsCallout>
 
                 <p className="text-fg-secondary">
-                  TraceAML is organized around that reality as a layered system, not a single
+                  Tripwire is organized around that reality as a layered system, not a single
                   oracle:
                 </p>
                 <ul className="list-disc space-y-2 pl-5 text-fg-secondary">
@@ -193,7 +193,7 @@ export function DocsView() {
                 </h2>
                 <p className="text-fg-secondary">
                   The first layer is deliberately boring technology, because it has to run across
-                  the whole stream. TraceAML pairs graph-derived features with a high-performance
+                  the whole stream. Tripwire pairs graph-derived features with a high-performance
                   gradient boosting detection engine. During the model selection tournament
                   (recorded in the Iteration 2 benchmarks), three candidate architectures were
                   evaluated against the baseline:
@@ -247,7 +247,7 @@ export function DocsView() {
 
                 <DocsCallout type="tip" title="Why Hard Bulk AP Matters">
                   <p>
-                    Standard test splits often include easy, high-value transfers. TraceAML
+                    Standard test splits often include easy, high-value transfers. Tripwire
                     evaluates models on the stringent{" "}
                     <strong>Hard Bulk September 9–10 split</strong>, isolating structured,
                     multi-account syndicate activity. Champion C1 maintains an outstanding 0.600
@@ -310,7 +310,7 @@ export function DocsView() {
                 </h2>
                 <p className="text-fg-secondary">
                   To increase security, the bank adds a second pass. Instead of asking one model to
-                  carry the whole decision, TraceAML runs an LLM agent downstream of the detector,
+                  carry the whole decision, Tripwire runs an LLM agent downstream of the detector,
                   over the transactions the model already flagged. The agent’s job is narrow and
                   explicit: look at the alert in the context of the surrounding network, and say
                   whether the evidence supports escalation.
@@ -424,7 +424,7 @@ export function DocsView() {
                   4. What the Agent Reads: The Graph
                 </h2>
                 <p className="text-fg-secondary">
-                  The agent pass is only as good as the context it can reach, and in TraceAML that
+                  The agent pass is only as good as the context it can reach, and in Tripwire that
                   context is the money-flow graph itself. The bank’s ledger was always a sequence of
                   transfers between accounts; the design decision is how to store it. Modeling
                   transactions as edges between accounts (e.g.,{" "}
@@ -436,7 +436,7 @@ export function DocsView() {
                   queries become slower and less precise.
                 </p>
                 <p className="text-fg-secondary">
-                  TraceAML enforces a fundamental architectural invariant:
+                  Tripwire enforces a fundamental architectural invariant:
                   <strong> First-Class Transactions</strong>.
                 </p>
 
@@ -455,7 +455,7 @@ export function DocsView() {
                     </span>
                   </div>
                   <p className="mt-3 text-xs text-fg-muted">
-                    TraceAML Canonical Graph Schema: Transactions are nodes holding immutable
+                    Tripwire Canonical Graph Schema: Transactions are nodes holding immutable
                     attributes (timestamp, amount, currency, channel).
                   </p>
                 </div>
@@ -484,7 +484,7 @@ export function DocsView() {
                 </ul>
 
                 <DocsCallout type="invariant" title="The Evaluation Isolation Invariant">
-                  TraceAML operates in a strictly target-free environment during live workbench
+                  Tripwire operates in a strictly target-free environment during live workbench
                   inference. Target labels (<code className="font-mono text-xs">is_laundering</code>
                   ) and ground-truth typologies remain quarantined in offline evaluation test sets.
                   The inference graph and API contracts never receive or return ground-truth labels.
@@ -614,7 +614,7 @@ RETURN path, downstream_tx, second_hop LIMIT $result_limit;`}
                 </h2>
                 <p className="text-fg-secondary">
                   Now that you understand the underlying architecture, here is how to navigate the
-                  TraceAML workbench interface efficiently:
+                  Tripwire workbench interface efficiently:
                 </p>
 
                 <div className="space-y-4 text-xs">
@@ -700,7 +700,7 @@ RETURN path, downstream_tx, second_hop LIMIT $result_limit;`}
                   9. Further Reading: Field Notes
                 </h2>
                 <p className="text-fg-secondary">
-                  The layered design in this guide is not unique to TraceAML; banks, exchanges, and
+                  The layered design in this guide is not unique to Tripwire; banks, exchanges, and
                   payment processors are converging on the same division of labor. The closest
                   public account is Coinbase’s three-part series on their Onramp fraud agent, which
                   documents the build, the evaluation method, and the post-training work in unusual
@@ -735,7 +735,7 @@ RETURN path, downstream_tx, second_hop LIMIT $result_limit;`}
                 />
 
                 <p className="text-fg-secondary">
-                  One scope note before you cite anything on this page: TraceAML is a synthetic IBM
+                  One scope note before you cite anything on this page: Tripwire is a synthetic IBM
                   AMLworld workbench, not a production deployment and not a Coinbase replica. The
                   shared lesson is about the shape of the system, a model for coverage, an agent for
                   context, and deterministic code for authority. The benchmark numbers in this guide

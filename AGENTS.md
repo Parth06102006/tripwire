@@ -1,6 +1,6 @@
-# Project Agent Directives: TraceAML
+# Project Agent Directives: Tripwire
 
-The repository is named Tripwire. The product is TraceAML: a graph-powered AML detection and investigation workbench using synthetic IBM AMLworld data and FalkorDB.
+The repository and the product are Tripwire: a graph-powered AML detection and investigation workbench using synthetic IBM AMLworld data and FalkorDB.
 
 ## Architecture invariants
 

@@ -88,17 +88,17 @@ Generated run artifacts are Git-ignored under `artifacts/runs/hi-small-v8/`:
 Rebuild the graph feature sidecar and model ablation with:
 
 ```bash
-uv run --project graph Tripwire-build-graph-features \
+uv run --project graph traceaml-build-graph-features \
   --parquet data/processed/hi-small-v8/transactions.parquet \
   --features-out data/processed/hi-small-v8/graph-features.parquet \
   --manifest-out data/processed/hi-small-v8/graph-features-manifest.json \
-  --feature-graph Tripwire-features
+  --feature-graph traceaml-features
 
-uv run --project ml Tripwire-train-baselines \
+uv run --project ml traceaml-train-baselines \
   --graph-features data/processed/hi-small-v8/graph-features.parquet \
   --output-dir artifacts/runs/hi-small-v8/graph-ablation
 ```
 
 The local latency artifacts preserve the sample summaries for this run. Repeat the same workload and hardware protocol before comparing future service changes.
 
-The versioned dashboard snapshot is `docs/benchmarks/iteration-1-performance.json`. The API reads it through `Tripwire_PERFORMANCE_PATH`; raw transaction data and generated run artifacts remain local and Git-ignored.
+The versioned dashboard snapshot is `docs/benchmarks/iteration-1-performance.json`. The API reads it through `TRACEAML_PERFORMANCE_PATH`; raw transaction data and generated run artifacts remain local and Git-ignored.

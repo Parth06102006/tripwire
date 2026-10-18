@@ -18,7 +18,7 @@ const GLOSSARY_TERMS: Term[] = [
     definition:
       "A ranking metric that calculates the area under the Precision-Recall curve. It summarizes how accurately a model ranks illicit transactions above legitimate ones.",
     context:
-      "In TraceAML, the Champion model achieves 0.752 AP on the held-out test split, compared to the 0.150 baseline (+374% relative gain).",
+      "In Tripwire, the Champion model achieves 0.752 AP on the held-out test split, compared to the 0.150 baseline (+374% relative gain).",
   },
   {
     term: "Alert Budget",
@@ -42,7 +42,7 @@ const GLOSSARY_TERMS: Term[] = [
     definition:
       "A high-throughput low-latency graph database engine built on Redis that utilizes GraphBLAS sparse-matrix linear algebra for Cypher query execution.",
     context:
-      "TraceAML queries FalkorDB to extract 2-hop subgraphs and counterparty rings around anchor alerts in sub-6 milliseconds.",
+      "Tripwire queries FalkorDB to extract 2-hop subgraphs and counterparty rings around anchor alerts in sub-6 milliseconds.",
   },
   {
     term: "Temporal Leakage Invariant",
@@ -50,7 +50,7 @@ const GLOSSARY_TERMS: Term[] = [
     definition:
       "The strict principle that no feature calculated for a transaction occurring at timestamp t may incorporate information or aggregate statistics generated after timestamp t.",
     context:
-      "Prevents artificial evaluation inflation. TraceAML generates features exclusively using past time horizons (t <= t_event).",
+      "Prevents artificial evaluation inflation. Tripwire generates features exclusively using past time horizons (t <= t_event).",
   },
   {
     term: "Suspicious Activity Report (SAR)",
@@ -58,13 +58,13 @@ const GLOSSARY_TERMS: Term[] = [
     definition:
       "A formalized legal dossier submitted by financial institutions to regulatory authorities (such as FinCEN or FIUs) detailing detected suspicious transactions.",
     context:
-      "When an analyst confirms an investigation in TraceAML, the workbench compiles the Cypher graph paths, LLM findings, and transaction timestamps into an audit-ready dossier.",
+      "When an analyst confirms an investigation in Tripwire, the workbench compiles the Cypher graph paths, LLM findings, and transaction timestamps into an audit-ready dossier.",
   },
   {
     term: "Agent Pass",
     category: "System Architecture",
     definition:
-      "The optional second layer of review in TraceAML: an LLM tool-calling agent that runs downstream of the model on flagged transactions, with bounded tools and a fixed human-review recommendation.",
+      "The optional second layer of review in Tripwire: an LLM tool-calling agent that runs downstream of the model on flagged transactions, with bounded tools and a fixed human-review recommendation.",
     context:
       "Enabled per investigation with use_llm: the agent drafts a risk level from 1 to 5 with reasoning points, and the deterministic verifier accepts them only when every cited record was returned by an approved tool.",
   },
@@ -82,7 +82,7 @@ const GLOSSARY_TERMS: Term[] = [
     definition:
       "An open protocol developed to standardize how LLMs connect with external data tools, APIs, and graph query execution engines.",
     context:
-      "The Gemini agent in TraceAML calls FalkorDB through MCP tools (trace_funds, inspect_counterparties, detect_flow_patterns), preventing raw database access while logging a verifiable tool trace.",
+      "The Gemini agent in Tripwire calls FalkorDB through MCP tools (trace_funds, inspect_counterparties, detect_flow_patterns), preventing raw database access while logging a verifiable tool trace.",
   },
   {
     term: "Deterministic Policy Ownership",
@@ -165,7 +165,7 @@ export function DocsGlossary() {
                 </div>
                 {isExpanded && (
                   <div className="mt-2.5 rounded border border-border-strong bg-surface p-2.5 text-xs">
-                    <span className="font-semibold text-accent">TraceAML Context: </span>
+                    <span className="font-semibold text-accent">Tripwire Context: </span>
                     <span className="text-fg-secondary">{item.context}</span>
                   </div>
                 )}

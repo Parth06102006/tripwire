@@ -1,7 +1,7 @@
 [project]
 name = "traceaml-ml"
 version = "0.1.0"
-description = "TraceAML offline evaluation: data protocol, baselines, and benchmarks."
+description = "Tripwire offline evaluation: data protocol, baselines, and benchmarks."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

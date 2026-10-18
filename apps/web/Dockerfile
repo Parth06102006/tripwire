@@ -1,4 +1,4 @@
-# Multi-stage image for the TraceAML web app (Next.js standalone server).
+# Multi-stage image for the Tripwire web app (Next.js standalone server).
 #
 # Build from the repository root (pnpm workspace):
 #

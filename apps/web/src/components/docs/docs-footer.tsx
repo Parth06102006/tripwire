@@ -40,14 +40,14 @@ export function DocsFooter({ claps, onClap }: DocsFooterProps) {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-semibold text-fg">
-              TraceAML Engineering & Detection Group
+              Tripwire Engineering & Detection Group
             </h4>
             <span className="text-3xs rounded bg-accent-soft px-2 py-0.5 font-semibold text-accent uppercase">
               Author
             </span>
           </div>
           <p className="text-xs leading-relaxed text-fg-secondary">
-            TraceAML is built by a dedicated team of graph engineers, machine learning researchers,
+            Tripwire is built by a dedicated team of graph engineers, machine learning researchers,
             and financial crime specialists. We develop deterministic and agentic intelligence
             tooling to help compliance teams outpace structured illicit networks.
           </p>

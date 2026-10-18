@@ -1,5 +1,5 @@
 /**
- * Typed client for the TraceAML API. Every response is parsed with its Zod
+ * Typed client for the Tripwire API. Every response is parsed with its Zod
  * schema at this boundary; components receive validated data or an ApiError.
  * Requests go to same-origin /api, which Next.js rewrites to the API service.
  */
@@ -211,7 +211,7 @@ export function describeApiError(error: unknown): string {
   if (!isApiError(error)) return "The request failed for an unexpected reason.";
   switch (error.kind) {
     case "network":
-      return "The API could not be reached. Check that the TraceAML API is running.";
+      return "The API could not be reached. Check that the Tripwire API is running.";
     case "aborted":
       return "The request was cancelled.";
     case "invalid_response":

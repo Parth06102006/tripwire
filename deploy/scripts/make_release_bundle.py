@@ -1,4 +1,4 @@
-"""Build the label-free data bundle a TraceAML server needs.
+"""Build the label-free data bundle a Tripwire server needs.
 
 Run on the workstation that holds the offline data and run artifacts:
 

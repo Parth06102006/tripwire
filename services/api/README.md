@@ -1,4 +1,4 @@
-# TraceAML API (`services/api`)
+# Tripwire API (`services/api`)
 
 uv-managed FastAPI service. Python >= 3.12. The single application entrypoint
 is `api.app:app` (`services/api/src/api/app.py`).
