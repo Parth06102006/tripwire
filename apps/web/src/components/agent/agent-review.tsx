@@ -1,6 +1,16 @@
 "use client";
 
-import { ArrowLeft, Check, Copy, List, Play, Waypoints, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  List,
+  Play,
+  Waypoints,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
@@ -11,13 +21,16 @@ import { CasePanel } from "@/components/investigation/case-panel";
 import { EvidencePanel } from "@/components/investigation/evidence-panel";
 import { GraphCanvas } from "@/components/investigation/graph/graph-canvas";
 import { SelectionDetail } from "@/components/investigation/selection-detail";
+import { investigationHref } from "@/components/overview/transaction-lookup";
 import { Mono } from "@/components/shared/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_REVIEW_BOUNDS, useAgentReview, type ReviewBounds } from "@/hooks/use-agent-review";
+import { useAgentReview, DEFAULT_REVIEW_BOUNDS, type ReviewBounds } from "@/hooks/use-agent-review";
+import { useAlerts } from "@/hooks/use-alerts";
 import { useHealth } from "@/hooks/use-health";
 import { batchNodeIds, type ToolItem } from "@/lib/agent/session";
 import type { ModelRoute } from "@/lib/api-schemas";
+import { cn } from "@/lib/cn";
 import { formatInteger, formatScore } from "@/lib/formatters";
 import type { Selection } from "@/lib/graph/flow";
 import { graphCounts, transactionNodeId, verifiedTransactionIds } from "@/lib/graph/model";
@@ -51,6 +64,13 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
       // Clipboard unavailable
     }
   };
+
+  const alerts = useAlerts({ limit: 50, offset: 0 });
+  const alertItems = alerts.data?.items ?? [];
+  const currentIndex = alertItems.findIndex((a) => a.transaction_id === transactionId);
+  const prevAlert = currentIndex > 0 ? alertItems[currentIndex - 1] : null;
+  const nextAlert =
+    currentIndex >= 0 && currentIndex < alertItems.length - 1 ? alertItems[currentIndex + 1] : null;
 
   const { state, streaming, pending, start, stop, showAll } = review;
   const { graph, positions, latest, items, runs } = state;
@@ -90,12 +110,60 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
         aria-label="Agent review"
       >
         <header className="border-b border-border px-4 pt-4 pb-3">
-          <Link
-            href="/overview"
-            className="inline-flex items-center gap-1 rounded-sm text-xs text-fg-muted hover:text-fg"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden /> Alert queue
-          </Link>
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href="/overview"
+              className="inline-flex items-center gap-1 rounded-sm text-xs text-fg-muted hover:text-fg"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden /> Alert queue
+            </Link>
+
+            {alertItems.length > 0 ? (
+              <div className="flex items-center gap-1.5 text-2xs text-fg-muted">
+                {currentIndex >= 0 ? (
+                  <span className="font-mono">
+                    #{currentIndex + 1} of {alertItems.length}
+                  </span>
+                ) : null}
+                <div className="flex items-center gap-0.5">
+                  <Link
+                    href={prevAlert ? investigationHref(prevAlert.transaction_id) : "#"}
+                    aria-disabled={!prevAlert}
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded border border-border/80 transition-colors",
+                      prevAlert
+                        ? "text-fg-secondary hover:bg-surface-elevated hover:text-fg"
+                        : "pointer-events-none opacity-25",
+                    )}
+                    title={
+                      prevAlert
+                        ? `Previous alert: ${prevAlert.transaction_id}`
+                        : "No previous alert in loaded queue"
+                    }
+                  >
+                    <ChevronLeft className="size-3.5" aria-hidden />
+                  </Link>
+                  <Link
+                    href={nextAlert ? investigationHref(nextAlert.transaction_id) : "#"}
+                    aria-disabled={!nextAlert}
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded border border-border/80 transition-colors",
+                      nextAlert
+                        ? "text-fg-secondary hover:bg-surface-elevated hover:text-fg"
+                        : "pointer-events-none opacity-25",
+                    )}
+                    title={
+                      nextAlert
+                        ? `Next alert: ${nextAlert.transaction_id}`
+                        : "No next alert in loaded queue"
+                    }
+                  >
+                    <ChevronRight className="size-3.5" aria-hidden />
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <h1 className="flex items-center gap-2 text-base font-semibold">
               <span className="sr-only">Agent review of </span>

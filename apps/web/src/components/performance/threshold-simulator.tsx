@@ -35,7 +35,12 @@ export function ThresholdSimulator({ models }: { models: Models }) {
   const testSplit = activeModel?.splits?.test;
   const totalTestRows =
     testSplit?.rows ??
-    (activeModel ? Math.round(activeModel.test_at_alert_budget.alerts / (activeModel.test_at_alert_budget.budget || 0.001)) : 1000);
+    (activeModel
+      ? Math.round(
+          activeModel.test_at_alert_budget.alerts /
+            (activeModel.test_at_alert_budget.budget || 0.001),
+        )
+      : 1000);
 
   const totalPositives = useMemo(() => {
     if (!activeModel) return 1000;
