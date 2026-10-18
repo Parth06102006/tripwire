@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Route, Shield, Terminal, Zap } from "lucide-react";
 import SiteHeader from "@/components/landing/site-header";
-import { DemoModal } from "@/components/landing/demo-modal";
 import { DocsArticleHeader } from "./docs-article-header";
 import { DocsToc, DOC_SECTIONS } from "./docs-toc";
 import { DocsPipelineDiagram } from "./docs-pipeline-diagram";
@@ -19,15 +18,9 @@ const COINBASE_FRAUD_AGENT_POST =
   "https://www.coinbase.com/en-in/blog/part-one-how-coinbase-built-evaluated-and-post-trained-a-fraud-agent";
 
 export function DocsView() {
-  const { theme, setTheme } = useDocsTheme();
+  const { theme } = useDocsTheme();
   const [progress, setProgress] = useState(0);
   const [activeSection, setActiveSection] = useState<string>("introduction");
-  const [claps, setClaps] = useState(142);
-  const [demoOpen, setDemoOpen] = useState(false);
-
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   // Scroll Progress calculation
   useEffect(() => {
@@ -94,19 +87,13 @@ export function DocsView() {
       </a>
 
       {/* The same navigation as the rest of the site. */}
-      <SiteHeader onRequestDemo={() => setDemoOpen(true)} />
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+      <SiteHeader />
 
       <main id="doc-content" className="mx-auto max-w-6xl px-4 py-8 sm:px-6 md:py-12">
         <div className="flex gap-12">
           {/* Main Article Column */}
           <article className="max-w-[760px] min-w-0 flex-1">
-            <DocsArticleHeader
-              theme={theme}
-              onToggleTheme={toggleTheme}
-              claps={claps}
-              onClap={() => setClaps((c) => c + 1)}
-            />
+            <DocsArticleHeader />
 
             {/* Editorial Body Content */}
             <div className="mt-8 space-y-12 text-sm leading-[1.8] sm:text-base sm:leading-[1.85]">
@@ -745,8 +732,8 @@ RETURN path, downstream_tx, second_hop LIMIT $result_limit;`}
               </section>
             </div>
 
-            {/* Footer with Author Bio and Workbench Links */}
-            <DocsFooter claps={claps} onClap={() => setClaps((c) => c + 1)} />
+            {/* Workbench launch cards */}
+            <DocsFooter />
           </article>
 
           {/* Sticky Sidebar Table of Contents */}

@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import CypherSandbox from "./cypher-sandbox";
-import { DemoModal } from "./demo-modal";
 import { HatchRule } from "./hatch-rule";
 import Hero from "./hero";
 import HowItWorks from "./how-it-works";
@@ -16,8 +14,6 @@ import WorkbenchPreview from "./workbench-preview";
 import { WorldDotMap } from "./world-map";
 
 export default function LandingView() {
-  const [demoOpen, setDemoOpen] = useState(false);
-
   return (
     <div
       data-landing-root
@@ -32,7 +28,7 @@ export default function LandingView() {
 
       <RevealScope>
         {/* Navigation Header */}
-        <SiteHeader onRequestDemo={() => setDemoOpen(true)} />
+        <SiteHeader />
 
         {/* Precision Blueprint Hatch Rule right below Header */}
         <HatchRule density={1} showCrosshairs className="opacity-80" />
@@ -71,9 +67,6 @@ export default function LandingView() {
         {/* Site Footer */}
         <SiteFooter />
       </RevealScope>
-
-      {/* Interactive Modals */}
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </div>
   );
 }
