@@ -53,6 +53,36 @@ class AlertItem(StrictModel):
     graph_status: Literal["available", "missing", "unknown"] = "unknown"
 
 
+class WindowUsageModel(StrictModel):
+    """One rolling window of the investigation allowance."""
+
+    limit: int
+    used: int
+    remaining: int
+    # Seconds until a slot comes back; null when nothing is counted.
+    resets_in_seconds: int | None
+
+
+class UsageModel(StrictModel):
+    hour: WindowUsageModel
+    day: WindowUsageModel
+
+
+class UserModel(StrictModel):
+    id: str
+    email: str | None = None
+    name: str | None = None
+
+
+class MeResponse(StrictModel):
+    """Who the caller is and how much investigation allowance is left."""
+
+    auth: Literal["jwt", "off"]
+    # Both are null when sign-in is off (local development).
+    user: UserModel | None = None
+    usage: UsageModel | None = None
+
+
 class RouteCounts(StrictModel):
     """Matching alerts per route under every filter except the route selection."""
 

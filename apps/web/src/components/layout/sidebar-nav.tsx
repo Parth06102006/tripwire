@@ -1,6 +1,6 @@
 "use client";
 
-import { Gauge, ListOrdered, Waypoints, type LucideIcon } from "lucide-react";
+import { BookOpen, Gauge, ListOrdered, Waypoints, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -26,6 +26,12 @@ const NAV: NavItem[] = [
     label: "Performance",
     icon: Gauge,
     match: (path) => path.startsWith("/performance"),
+  },
+  {
+    href: "/docs",
+    label: "Docs",
+    icon: BookOpen,
+    match: (path) => path.startsWith("/docs"),
   },
 ];
 

@@ -19,6 +19,10 @@ export default defineConfig({
     ? undefined
     : {
         command: `pnpm start --port ${port}`,
+        // The smoke tests drive the app with sign-in off. Run the API with
+        // TRACEAML_AUTH_MODE=off too. A production server refuses AUTH_MODE=off
+        // unless it is told this is a test run.
+        env: { AUTH_MODE: "off", AUTH_ALLOW_INSECURE_MODE: "i-understand" },
         url: baseURL,
         reuseExistingServer: true,
         timeout: 120_000,

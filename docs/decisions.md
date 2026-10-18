@@ -1,4 +1,4 @@
-# TraceAML Architecture Decisions
+# Tripwire Architecture Decisions
 
 These decisions lock the Iteration 1 foundation. Revisit a decision when measurements or source-data inspection reveal a concrete reason.
 
@@ -30,7 +30,7 @@ Keep target labels and typology ground truth in offline evaluation data. The fea
 
 **Status:** Accepted
 
-Compare logistic regression, LightGBM with transaction-local and past-only behavior features, and LightGBM with the same features plus graph-derived features. All share one train/validation/test protocol and frozen test cohort. Use a phase-separated offline pipeline with normalized Parquet, a versioned split manifest, model artifacts, and machine-readable metrics. Tracer's pipeline structure and fixed-recall reporting are references; its account-stratified split and full-period account aggregates are not used for TraceAML's transaction-time benchmark. Defer GNNs and graph transformers until this benchmark identifies a reason to add them.
+Compare logistic regression, LightGBM with transaction-local and past-only behavior features, and LightGBM with the same features plus graph-derived features. All share one train/validation/test protocol and frozen test cohort. Use a phase-separated offline pipeline with normalized Parquet, a versioned split manifest, model artifacts, and machine-readable metrics. Tracer's pipeline structure and fixed-recall reporting are references; its account-stratified split and full-period account aggregates are not used for Tripwire's transaction-time benchmark. Defer GNNs and graph transformers until this benchmark identifies a reason to add them.
 
 ## ADR-006: Keep scoring and action policy separate
 
@@ -72,7 +72,7 @@ Keep `Amount Paid` paired with `Payment Currency` and `Amount Received` paired w
 
 **Status:** Accepted
 
-Use Tracer's phase-separated processing, shared model artifacts, validation-selected thresholds, and fixed-recall/alert-budget comparisons as implementation references. Keep TraceAML's Next.js, FastAPI, and FalkorDB stack and its chronological transaction-level evaluation. Do not import Tracer's model scores, account-level labels, shuffled 60/20/20 split, or full-period aggregates into TraceAML. No Tracer source is vendored; if code is reused later, retain its Apache-2.0 notices and identify the upstream revision. The detailed review is in [the Tracer reference note](research/tracer-aml-reference.md).
+Use Tracer's phase-separated processing, shared model artifacts, validation-selected thresholds, and fixed-recall/alert-budget comparisons as implementation references. Keep Tripwire's Next.js, FastAPI, and FalkorDB stack and its chronological transaction-level evaluation. Do not import Tracer's model scores, account-level labels, shuffled 60/20/20 split, or full-period aggregates into Tripwire. No Tracer source is vendored; if code is reused later, retain its Apache-2.0 notices and identify the upstream revision. The detailed review is in [the Tracer reference note](research/tracer-aml-reference.md).
 
 ## ADR-013: Preserve exact duplicate source rows
 
@@ -94,7 +94,7 @@ Report validation-threshold results and fixed review-capacity results as distinc
 
 The Iteration 1 graph feature sidecar was built by streaming every same-minute group through a compact FalkorDB feature graph. All 5,078,345 rows took 1,563 seconds, of which 1,561.8 seconds were graph round trips. The five features (recent 24-hour distinct in/out counterparties for both endpoints and a prior reverse-flow flag) are aggregate functions of the past transfer stream; they do not need a database traversal.
 
-Build them by default with `traceaml-build-graph-features-batch` (`graph/src/graph/feature_batch.py`). It reads the same four allowlisted columns, applies the same minute-group visibility rule (strictly earlier minutes only; same-minute peers invisible), the inclusive `group_epoch - window` lower bound, all-time prior reverse flow, self-transfers as ordinary pairs, and the same smoke-mode trailing-minute drop, and writes the same schema. It rejects null projected values instead of coercing them. Seeded synthetic tests check it against a brute-force evaluation of the written semantics, against the streaming builder on an in-memory fake graph, and against the real FalkorDB builder row for row (skipped when FalkorDB is unreachable).
+Build them by default with `Tripwire-build-graph-features-batch` (`graph/src/graph/feature_batch.py`). It reads the same four allowlisted columns, applies the same minute-group visibility rule (strictly earlier minutes only; same-minute peers invisible), the inclusive `group_epoch - window` lower bound, all-time prior reverse flow, self-transfers as ordinary pairs, and the same smoke-mode trailing-minute drop, and writes the same schema. It rejects null projected values instead of coercing them. Seeded synthetic tests check it against a brute-force evaluation of the written semantics, against the streaming builder on an in-memory fake graph, and against the real FalkorDB builder row for row (skipped when FalkorDB is unreachable).
 
 Measured on synthetic data on the local development machine (Ryzen 9 8945HS): a 5,078,345-row, 18-day input with Zipf-like degrees ran in about 12-14 seconds end to end with about 1.4 GiB peak process memory. On its first 200,000 rows the FalkorDB builder took 130.1 seconds and the batch builder 1.1 seconds, with identical output (about 114x). These are synthetic results, not HI-Small measurements.
 
@@ -108,7 +108,7 @@ The API has a single application, `api.app:app`, used by `make dev-api`, the ser
 
 Investigation tools run concurrently on a bounded thread pool. Each worker thread holds its own falkordb-py graph handle (the handle caches schema state) over one shared, bounded Redis connection pool per process, so requests reuse sockets instead of connecting per request. Pattern queries start as soon as either stage-one tool returns the anchor transfer's account keys. Every query keeps its server-side timeout, and the evidence phase has an overall deadline derived from it. Evidence merges in a fixed order, so concurrency does not change results. `query_duration_ms` now reports evidence-phase wall time, with per-tool durations in `tool_durations_ms`. Iteration 1 measurements summed serial tool time and are not directly comparable.
 
-Case history is append-only in SQLite (`TRACEAML_CASE_DB_PATH`), enforced by triggers. Graph-side case links are deferred.
+Case history is append-only in SQLite (`Tripwire_CASE_DB_PATH`), enforced by triggers. Graph-side case links are deferred.
 
 ## ADR-017: Anchor graph queries on indexed keys; maintain Account.last_epoch; fresh-load create path
 
@@ -145,7 +145,7 @@ Context: latency, capacity, and cost need one reproducible command. The model wo
 
 Decisions:
 
-- `bench/` is its own uv project (`make bench`, `traceaml-bench`). It depends on `traceaml-api` and `traceaml-graph` as editable path dependencies, so it measures the code in the working tree. Direct tool timings go through `api.investigate.FalkorGraphTools` with the investigation's arguments.
+- `bench/` is its own uv project (`make bench`, `Tripwire-bench`). It depends on `Tripwire-api` and `Tripwire-graph` as editable path dependencies, so it measures the code in the working tree. Direct tool timings go through `api.investigate.FalkorGraphTools` with the investigation's arguments.
 - Protocol: warmups, then N samples, reporting P50/P95/P99/mean (linear interpolation). Capacity runs closed-loop clients in a separate load-generator process against a real uvicorn process. Each run records hardware, OS, Git commit, package versions, FalkorDB configuration, graph counts, input sha256 hashes, and the protocol in `results.json`.
 - Shared-host handling: a quiet gate checks foreign graph calls, blocked FalkorDB clients, FalkorDB CPU, and background host threads before every phase, within a run-wide budget. Every window records background load, contaminated capacity levels are re-measured once, and flagged results are labelled in the summary and snapshot. `--resume` adds missing workloads to an interrupted run after re-checking input hashes.
 - Cost is an explicit estimate: measured CPU-seconds and resident memory at dated, cited cloud list prices, reported both metered and provisioned. LLM cost is reported as zero calls.
@@ -161,9 +161,9 @@ The model is a proposer, not an authority (ADR-006, ADR-007). Automatic SDK func
 
 A draft is shown only after deterministic verification: cited IDs exist, structured claims match evidenced records field by field, cited paths equal returned paths, and prose identifiers and amount-sized numbers come from evidence. Free-text numbers below 1,000 and descriptive wording are not verified; amounts and dates belong in `cited_claims`, and the prompt requires it. Failures fall back to the deterministic report with a coarse reason code. Graph errors are not masked.
 
-Configuration uses the existing `LLM_PROVIDER`, `LLM_API_KEY`, and `LLM_MODEL` names (also `GEMINI_API_KEY` and `TRACEAML_`-prefixed forms). The key is a Pydantic `SecretStr` read from the git-ignored `.env`, is never logged or returned, and provider error text is discarded. Cost is reported only when both per-million-token prices are configured; none is assumed. The default model alias is `gemini-flash-latest`, configurable because model names change. Retrieved synthetic evidence is sent to Google only on opt-in requests.
+Configuration uses the existing `LLM_PROVIDER`, `LLM_API_KEY`, and `LLM_MODEL` names (also `GEMINI_API_KEY` and `Tripwire_`-prefixed forms). The key is a Pydantic `SecretStr` read from the git-ignored `.env`, is never logged or returned, and provider error text is discarded. Cost is reported only when both per-million-token prices are configured; none is assumed. The default model alias is `gemini-flash-latest`, configurable because model names change. Retrieved synthetic evidence is sent to Google only on opt-in requests.
 
-Status: unit-tested with a scripted model and an SDK-level stub; not yet exercised against the live Gemini API. A live smoke test is provided and skipped unless a key and `TRACEAML_LIVE_LLM_TEST=1` are set.
+Status: unit-tested with a scripted model and an SDK-level stub; not yet exercised against the live Gemini API. A live smoke test is provided and skipped unless a key and `Tripwire_LIVE_LLM_TEST=1` are set.
 
 ## ADR-021: MCP boundary and gated case actions for the agent
 
@@ -171,7 +171,7 @@ Status: unit-tested with a scripted model and an SDK-level stub; not yet exercis
 
 The agent reaches graph tools through an MCP server instead of direct function calls, and its case actions pass a deterministic gate.
 
-MCP: `api.mcp_graph` exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns` as typed, bounded MCP tools. They delegate to the existing parameterized queries (no Cypher is duplicated or generated) and reject out-of-range arguments before any database call. The agent runtime calls them through a real MCP client session (in-memory transport, one per LLM request) behind the existing `GraphTools` seam, so the investigation, verifier, and tests are unchanged. The provider's function calls are mapped onto MCP tool calls; the deterministic path keeps direct calls. `TRACEAML_AGENT_TOOL_TRANSPORT=direct` bypasses the protocol. The same server runs over stdio (`python -m api.mcp_graph`). The `mcp` package is pinned below 2.0 because 2.x renames the server API.
+MCP: `api.mcp_graph` exposes exactly `trace_funds`, `inspect_counterparties`, and `detect_flow_patterns` as typed, bounded MCP tools. They delegate to the existing parameterized queries (no Cypher is duplicated or generated) and reject out-of-range arguments before any database call. The agent runtime calls them through a real MCP client session (in-memory transport, one per LLM request) behind the existing `GraphTools` seam, so the investigation, verifier, and tests are unchanged. The provider's function calls are mapped onto MCP tool calls; the deterministic path keeps direct calls. `Tripwire_AGENT_TOOL_TRANSPORT=direct` bypasses the protocol. The same server runs over stdio (`python -m api.mcp_graph`). The `mcp` package is pinned below 2.0 because 2.x renames the server API.
 
 Outcomes and trace: every tool call is recorded (tool, bounded arguments, who chose it, outcome, counts, truncation, duration). Results use `evidence_found`, `no_matching_path`, `unknown_anchor`, or `inconclusive`; a capped result without a path is `inconclusive`, never a clean negative.
 
@@ -191,7 +191,7 @@ Charts: Apache ECharts with only the bar and line modules registered, rendered a
 
 Activity: the API returns an investigation as one response. The timeline does not simulate streaming. It shows the request, a truthful waiting state, then the events the response reports. A streaming endpoint (for example server-sent events carrying each tool-trace entry and its evidence as it completes) would let the graph grow per tool. It is recorded as a backend requirement, not built into the UI.
 
-Data handling: Zod validates every response at the client boundary and strips unknown fields. Unit and component tests use invented identifiers. End-to-end tests run against a live stack and write to the case store the API is configured with, so they run against a scratch `TRACEAML_CASE_DB_PATH`.
+Data handling: Zod validates every response at the client boundary and strips unknown fields. Unit and component tests use invented identifiers. End-to-end tests run against a live stack and write to the case store the API is configured with, so they run against a scratch `Tripwire_CASE_DB_PATH`.
 
 ## ADR-023: Escalation chain, agent risk level, and a streamed agent review
 
@@ -199,7 +199,7 @@ Data handling: Zod validates every response at the client boundary and strips un
 
 The deterministic model gathers suspicious transactions for operators; the agent review is the review of a flagged transaction. The escalation chain is:
 
-1. Traditional model and rules. A score at or above `TRACEAML_BLOCK_THRESHOLD` is a simulated block. The default `0.999` is a placeholder chosen without validation labels (it covers 42 of the 1,627 flagged test transactions) and must be set from validation precision before it is relied on. Blank disables the rule.
+1. Traditional model and rules. A score at or above `Tripwire_BLOCK_THRESHOLD` is a simulated block. The default `0.999` is a placeholder chosen without validation labels (it covers 42 of the 1,627 flagged test transactions) and must be set from validation precision before it is relied on. Blank disables the rule.
 2. Review routing. At or above the validation-selected review threshold the transaction is flagged for agent review; below it, it takes the standard path and is allowed.
 3. Agent review. The Gemini agent proposes a risk level from 1 to 5 under a fixed rubric, with reasoning points that cite returned transactions. Code verifies both like the hypothesis, then maps 4 to 5 to a block and 1 to 3 to an allow. Without a verified level the transaction stays flagged for an operator; it is not silently allowed. The agent cannot reverse an upstream block and does not change a standard-path allow.
 
@@ -215,7 +215,7 @@ Status: the escalation table, verification of the level and reasoning, both tran
 
 **Status:** Accepted
 
-The demo graphs were slices, so many queued alerts could not be investigated and failed only when an analyst opened them. The working environment now loads the full HI-Small v8 graph (5,078,345 transactions) under the contract name `traceaml`, so every scored transaction exists in the graph the agent queries.
+The demo graphs were slices, so many queued alerts could not be investigated and failed only when an analyst opened them. The working environment now loads the full HI-Small v8 graph (5,078,345 transactions) under the contract name `Tripwire`, so every scored transaction exists in the graph the agent queries.
 
 As a safeguard against partial or failed ingestion, `GET /api/alerts` reports `graph_status` per alert from one bounded, indexed lookup per page. The queue marks a missing alert instead of hiding it: filtering would silently drop flagged alerts, which an AML queue must never do, and a visible gap gets the ingestion fixed. When FalkorDB cannot be asked the status is `unknown` and the queue still loads. Demo slices remain available through `make graph-load-demo` for fast local work, with the same visible marking.
 
@@ -233,7 +233,25 @@ The landing page keeps its own content. Its recorded-metrics strip reads the sam
 
 **Status:** Accepted
 
-The performance screen had been serving the Iteration 1 baseline metrics, which `docs/benchmarks/iteration-2-detection.md` supersedes. `/api/benchmarks` now serves the four rows of that document's summary (the frozen Iteration 1 baseline, C3, C2, and the selected model C1) from a committed export, `docs/benchmarks/iteration-2-detection.json`. `ml/experiments/export_api_benchmarks.py` writes it from the frozen test ledger, so the figures are not retyped, and a test pins the C1 values. The Sept 9-10 bulk is exported beside the full-cohort figures and the screen leads with it, because the document shows the full-cohort numbers are inflated by a near-separable 1,108-row tail. The export adds metrics only: no scores, labels or per-row outcomes. The replay queue is still scored by the Iteration 1 artifact until `TRACEAML_SCORE_ARTIFACT` is switched as the document describes.
+The performance screen had been serving the Iteration 1 baseline metrics, which `docs/benchmarks/iteration-2-detection.md` supersedes. `/api/benchmarks` now serves the four rows of that document's summary (the frozen Iteration 1 baseline, C3, C2, and the selected model C1) from a committed export, `docs/benchmarks/iteration-2-detection.json`. `ml/experiments/export_api_benchmarks.py` writes it from the frozen test ledger, so the figures are not retyped, and a test pins the C1 values. The Sept 9-10 bulk is exported beside the full-cohort figures and the screen leads with it, because the document shows the full-cohort numbers are inflated by a near-separable 1,108-row tail. The export adds metrics only: no scores, labels or per-row outcomes. The replay queue is still scored by the Iteration 1 artifact until `Tripwire_SCORE_ARTIFACT` is switched as the document describes.
 
 The overview queue now filters on the API (route, score range, day range, transaction ID text) instead of only within the loaded page, so a filter reaches all 761,639 scored transactions. Route and score filters are rank ranges found by bisection; date and text filters take one pass over the matching score window. The queue never drops an alert silently: filters are explicit, shown, and clearable, and `scored_total` stays visible. The overview is one viewport tall from the `xl` breakpoint up, and only the queue table scrolls.
+
+## ADR-027: Better Auth sign-in with an access list, signed tokens for the API, and per-user investigation limits
+
+**Status:** Accepted
+
+The deployment guide protected the app with one shared Caddy password. That gives no per-person identity and no way to limit who spends the Gemini key.
+
+**Sign-in.** The Next.js app runs Better Auth with Google and GitHub, a SQLite store (Node's built-in `node:sqlite`, one volume), a seven day session, and account linking between the two providers. Only addresses on `AUTH_ALLOWED_EMAILS` (full addresses or `@domain`) can create an account or a session; an empty list allows nobody. The check runs when a user is created and again on every new session, and requires a verified email. A `dev` mode with an email and password form and an `off` mode exist for local work; both are refused when `NODE_ENV=production` unless `AUTH_ALLOW_INSECURE_MODE=i-understand` is set, and `oauth` mode needs an https base URL.
+
+**API trust.** The API stays a separate service and does not share the web app's database or secret. Better Auth's JWT plugin issues a 15 minute EdDSA token (issuer and audience are the public base URL, payload `sub`, `email`, `name`), and the API verifies it with PyJWT against the web app's JWKS, cached for five minutes. Only EdDSA, ES256 and RS256 are accepted. The API refuses to start in `jwt` mode without its three settings. `/api/health` and `/api/benchmarks` stay public so health checks and the landing page's metrics keep working.
+
+**Limits.** 10 per rolling hour and 20 per rolling day per user, stored as one row per started investigation in the case database. The check and the insert are one SQL statement, so simultaneous requests cannot exceed the limit even across processes (a test fires 40 at once and exactly 10 pass). A started investigation counts whether or not it succeeds, because the cost is spent at the start; requests that fail before any work do not count. Rows older than two days are deleted on each claim.
+
+**Edge.** Caddy drops basic auth and sends `/api/auth/*` to the web app and every other `/api/*` call straight to the API. That also removes the Next.js rewrite's default 30 second proxy limit from the agent review stream. In `next.config.ts` the `/api` rewrite excludes `/api/auth`, because a rewrite is matched before dynamic routes.
+
+**Public demo.** `AUTH_ALLOWED_EMAILS=*` lets any person with a verified email sign in. It must be set explicitly: an empty list still allows nobody. The limits are per account, so a person with many accounts gets many allowances; a global daily cap is the next safeguard if the Gemini key is exposed.
+
+**Not done.** The reviewer ID on a case is still typed by the analyst, not taken from the signed-in user. Removing someone from the access list takes effect when their token and session next renew, not instantly. Better Auth's own rate limiter is not configured; the API limit covers the costly path. With more than one API instance the usage table needs the case store moved off SQLite.
 

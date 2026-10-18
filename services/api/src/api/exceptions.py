@@ -22,9 +22,19 @@ class TraceAMLError(Exception):
     status_code: int = 500
     detail: str = "internal error"
 
-    def __init__(self, detail: str | None = None) -> None:
+    def __init__(
+        self,
+        detail: str | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+        extra: dict[str, object] | None = None,
+    ) -> None:
         if detail is not None:
             self.detail = detail
+        # Response headers and extra JSON fields for errors that carry advice,
+        # such as ``Retry-After``. Both hold only values the API computed.
+        self.headers = headers
+        self.extra = extra or {}
         super().__init__(self.detail)
 
 
@@ -33,6 +43,20 @@ class NotFoundError(TraceAMLError):
 
     status_code = 404
     detail = "not found"
+
+
+class UnauthorizedError(TraceAMLError):
+    """No valid sign-in token accompanied the request."""
+
+    status_code = 401
+    detail = "authentication required"
+
+
+class RateLimitedError(TraceAMLError):
+    """The caller used up an investigation allowance."""
+
+    status_code = 429
+    detail = "investigation limit reached"
 
 
 class ConflictError(TraceAMLError):
@@ -84,7 +108,11 @@ def setup_exception_handlers(app: FastAPI) -> None:
             logger.error("request failed: %s", type(exc).__name__, exc_info=exc.__cause__)
         elif exc.status_code > 500:
             logger.warning("dependency failure: %s (%s)", exc.detail, type(exc.__cause__).__name__)
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail, **exc.extra},
+            headers=exc.headers,
+        )
 
     @app.exception_handler(Exception)
     async def unhandled_handler(_request: Request, exc: Exception) -> JSONResponse:

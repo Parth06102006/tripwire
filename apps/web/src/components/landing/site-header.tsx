@@ -1,24 +1,35 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { BrandLockup } from "./brand";
 import { CtaArrow, CtaLink } from "./cta";
-import { DEMO_HREF, NAV_LINKS, REPO_URL, WORKBENCH_HREF } from "./links";
+import { signOutAndLeave } from "@/lib/auth/sign-out";
+import { useAuthStatus } from "@/lib/auth/use-auth-status";
+import { DEMO_HREF, NAV_LINKS, SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
 
 interface SiteHeaderProps {
   onRequestDemo?: () => void;
-  onContact?: () => void;
 }
 
 /**
  * Landing navigation matching the baseline screenshot:
  * Crisp typography, brand lockup, section navigation, and distinct CTA buttons.
  */
-export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps) {
+export default function SiteHeader({ onRequestDemo }: SiteHeaderProps) {
   const [open, setOpen] = useState(false);
+  // Signed out: Sign in and Sign up. Signed in: Sign out. Sign-in off: neither.
+  const status = useAuthStatus();
+  const canEnter = status !== "signed-out";
+  const signedIn = status === "signed-in";
+  const [leaving, setLeaving] = useState(false);
+  const signOut = async () => {
+    setLeaving(true);
+    // Back to the landing page, now signed out.
+    await signOutAndLeave("/");
+  };
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -46,8 +57,8 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
       className={cn(
         "sticky top-0 z-50 w-full transition-[background-color,border-color] duration-[var(--motion-standard)] ease-[var(--ease-out)]",
         scrolled || open
-          ? "border-b border-line bg-[#0a0b0c]/94 backdrop-blur-xl"
-          : "border-b border-transparent bg-[#0a0b0c]/60 backdrop-blur-md",
+          ? "border-b border-line bg-canvas/94 backdrop-blur-xl"
+          : "border-b border-transparent bg-canvas/60 backdrop-blur-md",
       )}
     >
       <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-6 px-4 sm:h-[72px] sm:px-8">
@@ -58,7 +69,7 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-full px-3.5 py-1.5 text-[13px] text-[#b0b3af] transition-colors duration-[var(--motion-fast)] hover:bg-white/[0.05] hover:text-white"
+              className="rounded-full px-3.5 py-1.5 text-[13px] text-ink-soft transition-colors duration-[var(--motion-fast)] hover:bg-hover hover:text-ink"
             >
               {item.label}
             </Link>
@@ -66,30 +77,37 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
         </nav>
 
         <div className="flex items-center gap-3">
-          <Link
-            href={WORKBENCH_HREF}
-            className="mr-1 hidden items-center font-mono text-[12px] text-dim transition-colors hover:text-accent xl:inline-flex"
-          >
-            Open the workbench
-          </Link>
-
-          {onContact ? (
-            <button
-              type="button"
-              onClick={onContact}
-              className="hidden items-center justify-center rounded-full border border-line-strong bg-white/[0.02] px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-white/30 hover:bg-white/[0.06] sm:inline-flex"
-            >
-              Contact us
-            </button>
+          {canEnter ? (
+            <>
+              {signedIn ? (
+                <button
+                  type="button"
+                  onClick={signOut}
+                  disabled={leaving}
+                  className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink disabled:opacity-50 sm:inline-flex"
+                >
+                  <LogOut aria-hidden="true" className="size-3.5" />
+                  Sign out
+                </button>
+              ) : null}
+            </>
           ) : (
-            <CtaLink
-              href={REPO_URL}
-              variant="secondary"
-              size="sm"
-              className="hidden sm:inline-flex"
-            >
-              Contact us
-            </CtaLink>
+            <>
+              <Link
+                href={SIGN_IN_HREF}
+                className="hidden items-center rounded-full px-3 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:text-ink sm:inline-flex"
+              >
+                Sign in
+              </Link>
+              <CtaLink
+                href={SIGN_UP_HREF}
+                variant="secondary"
+                size="sm"
+                className="hidden sm:inline-flex"
+              >
+                Sign up
+              </CtaLink>
+            </>
           )}
 
           {onRequestDemo ? (
@@ -113,7 +131,7 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
             aria-label={open ? "Close navigation" : "Open navigation"}
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line-strong text-ink transition-colors hover:bg-white/[0.06] lg:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-line-strong text-ink transition-colors hover:bg-hover lg:hidden"
           >
             {open ? (
               <X aria-hidden="true" className="h-4 w-4" />
@@ -138,13 +156,15 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
                   {item.label}
                 </Link>
               ))}
-              <Link
-                href={WORKBENCH_HREF}
-                onClick={() => setOpen(false)}
-                className="border-b border-line py-3 text-sm text-accent transition-colors"
-              >
-                Open the workbench
-              </Link>
+              {canEnter ? null : (
+                <Link
+                  href={SIGN_IN_HREF}
+                  onClick={() => setOpen(false)}
+                  className="border-b border-line py-3 text-sm text-ink transition-colors hover:text-accent"
+                >
+                  Sign in
+                </Link>
+              )}
             </nav>
             <div className="mt-5 flex flex-col gap-2.5">
               <button
@@ -158,16 +178,27 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
                 Request a demo
                 <CtaArrow />
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  if (onContact) onContact();
-                }}
-                className="flex items-center justify-center rounded-full border border-line-strong py-2.5 text-sm font-medium text-ink"
-              >
-                Contact us
-              </button>
+              {canEnter ? (
+                signedIn ? (
+                  <button
+                    type="button"
+                    onClick={signOut}
+                    disabled={leaving}
+                    className="flex items-center justify-center gap-1.5 rounded-full border border-line-strong py-2.5 text-sm font-medium text-ink disabled:opacity-50"
+                  >
+                    <LogOut aria-hidden="true" className="size-4" />
+                    Sign out
+                  </button>
+                ) : null
+              ) : (
+                <Link
+                  href={SIGN_UP_HREF}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-center rounded-full border border-line-strong py-2.5 text-sm font-medium text-ink"
+                >
+                  Sign up
+                </Link>
+              )}
             </div>
           </div>
         </div>

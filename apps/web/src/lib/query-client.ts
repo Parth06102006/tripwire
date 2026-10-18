@@ -25,6 +25,7 @@ export function createQueryClient(): QueryClient {
 
 export const queryKeys = {
   health: ["health"] as const,
+  me: ["me"] as const,
   alerts: (params: AlertParams) => ["alerts", params] as const,
   benchmarks: ["benchmarks"] as const,
   cases: ["cases"] as const,

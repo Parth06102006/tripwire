@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from api import schemas
 from api.actions import apply_case_action
+from api.auth import AuthenticatedUser, CurrentUser, TokenVerifier, get_current_user
 from api.cases.router import router as cases_router
 from api.cypher_log import CypherRecordingTools
 from api.database import CaseDatabase
@@ -57,6 +58,7 @@ from api.scores import (
 from api.settings import Settings
 from api.stream import StreamListener, sse
 from api.tooltrace import ToolListener, TracedTools, TracingTools
+from api.usage import UsageLimiter, get_usage_limiter
 
 __all__ = ["app", "create_app", "get_graph_tools", "get_score_repository"]
 
@@ -65,6 +67,25 @@ logger = logging.getLogger("api")
 # Sequential database calls per tool, worst case: stage one tools run two
 # queries, pattern tools three. Used to bound the whole evidence phase.
 QUERIES_PER_INVESTIGATION_PATH = 5
+
+
+async def claim_allowance(
+    user: AuthenticatedUser | None, limiter: UsageLimiter, transaction_id: str
+) -> None:
+    """Spend one of the user's investigations, or raise a 429.
+
+    With sign-in off there is no user, so there is nothing to limit.
+    """
+    if user is None:
+        return
+    usage = await limiter.claim(user.subject)
+    logger.info(
+        "investigation started user=%s transaction=%s remaining_hour=%d remaining_day=%d",
+        user.subject,
+        transaction_id,
+        usage.hour.remaining,
+        usage.day.remaining,
+    )
 
 
 def investigation_wait_seconds(settings: Settings) -> float:
@@ -77,6 +98,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the FastAPI application with settings captured once."""
     resolved = settings if settings is not None else Settings()
     case_db = CaseDatabase(resolve_path(resolved.case_db_path))
+    # Fail at startup, not on the first request, when sign-in is on but the
+    # service has no keys to verify tokens with.
+    verifier = TokenVerifier(resolved) if resolved.auth_mode == "jwt" else None
+    limiter = UsageLimiter(
+        case_db,
+        hour_limit=resolved.investigation_limit_hour,
+        day_limit=resolved.investigation_limit_day,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -95,6 +124,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="TraceAML API", version=resolved.app_version, lifespan=lifespan)
     app.state.settings = resolved
     app.state.case_db = case_db
+    app.state.token_verifier = verifier
+    app.state.usage_limiter = limiter
     setup_exception_handlers(app)
 
     @app.get("/api/health", response_model=schemas.HealthResponse)
@@ -106,7 +137,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             llm="configured" if settings.llm_configured else "not_configured",
         )
 
-    @app.get("/api/alerts", response_model=schemas.AlertsResponse)
+    @app.get("/api/me", response_model=schemas.MeResponse)
+    async def get_me(
+        user: CurrentUser,
+        limiter: Annotated[UsageLimiter, Depends(get_usage_limiter)],
+    ) -> schemas.MeResponse:
+        if user is None:
+            return schemas.MeResponse(auth="off")
+        usage = await limiter.usage(user.subject)
+
+        def window(item: object) -> schemas.WindowUsageModel:
+            return schemas.WindowUsageModel(
+                limit=item.limit,  # type: ignore[attr-defined]
+                used=item.used,  # type: ignore[attr-defined]
+                remaining=item.remaining,  # type: ignore[attr-defined]
+                resets_in_seconds=item.resets_in_seconds,  # type: ignore[attr-defined]
+            )
+
+        return schemas.MeResponse(
+            auth="jwt",
+            user=schemas.UserModel(id=user.subject, email=user.email, name=user.name),
+            usage=schemas.UsageModel(hour=window(usage.hour), day=window(usage.day)),
+        )
+
+    @app.get(
+        "/api/alerts",
+        response_model=schemas.AlertsResponse,
+        dependencies=[Depends(get_current_user)],
+    )
     def get_alerts(
         settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
@@ -177,6 +235,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def post_investigation(
         request: schemas.InvestigationRequest,
         http_request: Request,
+        user: CurrentUser,
+        limiter: Annotated[UsageLimiter, Depends(get_usage_limiter)],
         settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
         tools: Annotated[GraphTools, Depends(get_graph_tools)],
@@ -185,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         score = repo.score_for(request.transaction_id)
         if score is None:
             raise TransactionNotFoundError()
+        await claim_allowance(user, limiter, request.transaction_id)
         threshold = read_threshold(settings)
         response = await anyio.to_thread.run_sync(
             lambda: run_investigation(request, score, threshold, tools, settings, session_factory)
@@ -195,15 +256,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def stream_investigation(
         request: schemas.InvestigationRequest,
         http_request: Request,
+        user: CurrentUser,
+        limiter: Annotated[UsageLimiter, Depends(get_usage_limiter)],
         settings: SettingsDep,
         repo: Annotated[ScoreRepository, Depends(get_score_repository)],
         tools: Annotated[GraphTools, Depends(get_graph_tools)],
         session_factory: Annotated[SessionFactory, Depends(get_llm_session_factory)],
     ) -> StreamingResponse:
-        # Errors known before the first event keep their plain HTTP status.
+        # Errors known before the first event keep their plain HTTP status,
+        # including a refused allowance (429).
         score = repo.score_for(request.transaction_id)
         if score is None:
             raise TransactionNotFoundError()
+        await claim_allowance(user, limiter, request.transaction_id)
         threshold = read_threshold(settings)
         started = schemas.StreamStarted(
             transaction_id=request.transaction_id,

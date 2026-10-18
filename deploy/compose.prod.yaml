@@ -41,6 +41,18 @@ services:
       TRACEAML_FALKORDB_HOST: falkordb
       TRACEAML_FALKORDB_PORT: "6379"
       TRACEAML_CASE_DB_PATH: /app/data/cases/cases.db
+      # Verify the sign-in tokens the web app issues. The key set is fetched over the
+      # private network; the issuer and audience are the public address Better Auth
+      # signs into every token.
+      TRACEAML_AUTH_MODE: jwt
+      # The API verifies tokens with public keys only. It never receives the web
+      # app's signing secret or the OAuth client secrets from the shared env file.
+      BETTER_AUTH_SECRET: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GITHUB_CLIENT_SECRET: ""
+      TRACEAML_AUTH_JWKS_URL: http://web:3000/api/auth/jwks
+      TRACEAML_AUTH_ISSUER: https://${TRACEAML_DOMAIN}
+      TRACEAML_AUTH_AUDIENCE: https://${TRACEAML_DOMAIN}
     volumes:
       # Label-free release artifacts only (deploy/scripts/make_release_bundle.py).
       - ${ARTIFACTS_DIR:-/srv/traceaml/artifacts}:/app/artifacts:ro
@@ -70,6 +82,16 @@ services:
     image: ${IMAGE_PREFIX:-traceaml}/web:${RELEASE:-local}
     restart: unless-stopped
     networks: [backend]
+    env_file: .env.production
+    environment:
+      AUTH_MODE: oauth
+      BETTER_AUTH_URL: https://${TRACEAML_DOMAIN}
+      AUTH_DB_PATH: /app/data/auth/auth.db
+      # The web app has no use for the Gemini key; only the API calls the model.
+      LLM_API_KEY: ""
+    volumes:
+      # Accounts and sessions. Losing it signs everyone out; it holds no case data.
+      - auth:/app/data/auth
     depends_on:
       api:
         condition: service_healthy
@@ -85,8 +107,6 @@ services:
     environment:
       TRACEAML_DOMAIN: ${TRACEAML_DOMAIN:?set TRACEAML_DOMAIN in deploy/.env.production}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL (Let's Encrypt expiry and revocation notices)}
-      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER}
-      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH (caddy hash-password)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -123,5 +143,6 @@ networks:
 volumes:
   falkordb-data: {}
   cases: {}
+  auth: {}
   caddy-data: {}
   caddy-config: {}

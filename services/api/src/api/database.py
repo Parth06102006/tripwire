@@ -102,6 +102,7 @@ class CaseDatabase:
             if self._ready:
                 return
             # Importing the models registers their tables on Base.metadata.
+            from api import usage  # noqa: F401
             from api.cases import models  # noqa: F401
 
             self.path.parent.mkdir(parents=True, exist_ok=True)

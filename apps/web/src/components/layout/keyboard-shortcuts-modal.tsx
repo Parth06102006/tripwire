@@ -36,7 +36,14 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   },
 ];
 
-export function KeyboardShortcutsModal() {
+/** Dispatch this on `window` to open the guide from anywhere, such as the account menu. */
+export const OPEN_SHORTCUTS_EVENT = "tripwire:open-shortcuts";
+
+/**
+ * The shortcuts guide. Mount it once: it listens for `?` and `/`, and for
+ * OPEN_SHORTCUTS_EVENT. `showTrigger={false}` leaves out its own button.
+ */
+export function KeyboardShortcutsModal({ showTrigger = true }: { showTrigger?: boolean } = {}) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -68,20 +75,27 @@ export function KeyboardShortcutsModal() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const openFromElsewhere = () => setOpen(true);
+    window.addEventListener(OPEN_SHORTCUTS_EVENT, openFromElsewhere);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener(OPEN_SHORTCUTS_EVENT, openFromElsewhere);
+    };
   }, []);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-2xs text-fg-muted transition-colors hover:text-fg"
-        title="Keyboard shortcuts (?)"
-      >
-        <Keyboard className="size-3" aria-hidden />
-        <span>Shortcuts</span>
-      </button>
+      {showTrigger ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1.5 text-2xs text-fg-muted transition-colors hover:text-fg"
+          title="Keyboard shortcuts (?)"
+        >
+          <Keyboard className="size-3" aria-hidden />
+          <span>Shortcuts</span>
+        </button>
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent

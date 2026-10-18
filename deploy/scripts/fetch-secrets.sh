@@ -5,8 +5,10 @@
 #   bash deploy/scripts/fetch-secrets.sh /traceaml/prod
 #
 # Expects SecureString parameters under the prefix:
-#   <prefix>/LLM_API_KEY        optional Gemini key
-#   <prefix>/BASIC_AUTH_HASH    bcrypt hash from `caddy hash-password`
+#   <prefix>/BETTER_AUTH_SECRET     at least 32 characters (openssl rand -base64 32)
+#   <prefix>/GOOGLE_CLIENT_SECRET   optional; with GOOGLE_CLIENT_ID in the env file
+#   <prefix>/GITHUB_CLIENT_SECRET   optional; with GITHUB_CLIENT_ID in the env file
+#   <prefix>/LLM_API_KEY            optional Gemini key
 # The instance role needs ssm:GetParameter and kms:Decrypt on them.
 set -euo pipefail
 
@@ -36,7 +38,7 @@ PY
   fi
 }
 
-for name in LLM_API_KEY BASIC_AUTH_HASH; do
+for name in BETTER_AUTH_SECRET GOOGLE_CLIENT_SECRET GITHUB_CLIENT_SECRET LLM_API_KEY; do
   value="$(get "$name")"
   if [[ -n "$value" ]]; then
     set_var "$name" "$value"

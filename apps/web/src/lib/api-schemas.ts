@@ -17,6 +17,25 @@ export const healthSchema = z.object({
 });
 export type Health = z.infer<typeof healthSchema>;
 
+const windowUsageSchema = z.object({
+  limit: z.number().int(),
+  used: z.number().int(),
+  remaining: z.number().int(),
+  /** Seconds until a slot comes back; null when nothing is counted. */
+  resets_in_seconds: z.number().int().nullable(),
+});
+
+/** Who the caller is and how many investigations they have left (GET /api/me). */
+export const meSchema = z.object({
+  auth: z.enum(["jwt", "off"]),
+  user: z
+    .object({ id: z.string(), email: z.string().nullish(), name: z.string().nullish() })
+    .nullable(),
+  usage: z.object({ hour: windowUsageSchema, day: windowUsageSchema }).nullable(),
+});
+export type Me = z.infer<typeof meSchema>;
+export type Usage = NonNullable<Me["usage"]>;
+
 export const decisionSchema = z.enum(["allow", "review"]);
 export type Decision = z.infer<typeof decisionSchema>;
 

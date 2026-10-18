@@ -166,6 +166,7 @@ export function useAgentReview(transactionId: string): AgentReview {
                   kind: error.kind,
                   status: error.status,
                   detail: error.detail,
+                  rateLimit: error.rateLimit,
                   message: error.message,
                 }
               : { kind: "network", status: null, detail: null, message: "stream failed" },

@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import BenchmarksSection from "./benchmarks-section";
-import ClosingCta from "./closing-cta";
-import { ContactModal } from "./contact-modal";
 import CypherSandbox from "./cypher-sandbox";
 import { DemoModal } from "./demo-modal";
 import { HatchRule } from "./hatch-rule";
@@ -20,7 +17,6 @@ import { WorldDotMap } from "./world-map";
 
 export default function LandingView() {
   const [demoOpen, setDemoOpen] = useState(false);
-  const [contactOpen, setContactOpen] = useState(false);
 
   return (
     <div
@@ -36,17 +32,14 @@ export default function LandingView() {
 
       <RevealScope>
         {/* Navigation Header */}
-        <SiteHeader
-          onRequestDemo={() => setDemoOpen(true)}
-          onContact={() => setContactOpen(true)}
-        />
+        <SiteHeader onRequestDemo={() => setDemoOpen(true)} />
 
         {/* Precision Blueprint Hatch Rule right below Header */}
         <HatchRule density={1} showCrosshairs className="opacity-80" />
 
         <main id="content" className="w-full">
           {/* Hero Section */}
-          <Hero onRequestDemo={() => setDemoOpen(true)} onContact={() => setContactOpen(true)} />
+          <Hero />
 
           {/* Product Preview: Amber Dot-Matrix World Silhouette + Floating Workbench Card */}
           <section
@@ -73,12 +66,6 @@ export default function LandingView() {
 
           {/* 4-Step Investigation Pipeline */}
           <HowItWorks />
-
-          {/* Benchmark Laboratory & Recorded Metrics */}
-          <BenchmarksSection />
-
-          {/* Closing Call to Action */}
-          <ClosingCta />
         </main>
 
         {/* Site Footer */}
@@ -87,7 +74,6 @@ export default function LandingView() {
 
       {/* Interactive Modals */}
       <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
-      <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
     </div>
   );
 }

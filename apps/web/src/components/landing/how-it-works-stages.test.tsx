@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, render, screen } from "@testing-library/react";
+import { motionValue } from "motion/react";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
+
+import { STAGE_END, STAGE_START, TeaserProgressContext } from "@/components/ui/teaser-progress";
 
 import { DecideStage, ScoreStage, TraceStage, VerifyStage } from "./how-it-works-stages";
 
@@ -11,95 +14,115 @@ function status() {
   return chip;
 }
 
+/** Teaser progress for a point in the stage's own time, 0 to 1. */
+const progressAt = (time: number) => STAGE_START + time * (STAGE_END - STAGE_START);
+
+/** Render a stage inside a teaser, and return a way to scroll it to a point in its time. */
+function renderScrolled(stage: ReactElement, time = 0) {
+  const progress = motionValue(progressAt(time));
+  render(<TeaserProgressContext.Provider value={progress}>{stage}</TeaserProgressContext.Provider>);
+  return (next: number) => act(() => progress.set(progressAt(next)));
+}
+
 describe("ScoreStage", () => {
-  it("moves the verdict with the score and keeps policy in charge", () => {
-    render(<ScoreStage />);
-    const slider = screen.getByRole("slider", { name: "Risk score" });
+  it("raises the score as the teaser scrolls and moves the verdict with it", () => {
+    const scrollTo = renderScrolled(<ScoreStage />, 0);
+    expect(status()).toHaveTextContent("Allow");
+    expect(screen.getByText("0.12")).toBeInTheDocument();
+    expect(screen.getByText("Below the review threshold, the transfer runs.")).toBeInTheDocument();
+
+    scrollTo(0.5);
     expect(status()).toHaveTextContent("Review");
     expect(screen.getByText(/A case is queued for an analyst/)).toBeInTheDocument();
 
-    fireEvent.change(slider, { target: { value: "0.2" } });
-    expect(status()).toHaveTextContent("Allow");
-    expect(slider).toHaveAttribute("aria-valuetext", "0.20, Allow");
-    expect(screen.getByText(/the transfer runs/i)).toBeInTheDocument();
-
-    fireEvent.change(slider, { target: { value: "0.94" } });
+    scrollTo(1);
     expect(status()).toHaveTextContent("Block");
+    expect(screen.getByText("0.92")).toBeInTheDocument();
     expect(screen.getByText(/A simulated block/)).toBeInTheDocument();
   });
 
-  it("states the two policy thresholds", () => {
-    render(<ScoreStage />);
+  it("states the two policy thresholds and asks for no input", () => {
+    renderScrolled(<ScoreStage />);
     expect(screen.getByText("review at 0.45")).toBeInTheDocument();
     expect(screen.getByText("block at 0.80")).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 });
 
 describe("TraceStage", () => {
-  it("walks one hop, follows one branch and reports the funds path", async () => {
-    render(<TraceStage />);
+  it("walks one hop, then follows one branch to the funds path, as it scrolls", () => {
+    const scrollTo = renderScrolled(<TraceStage />, 0);
     expect(status()).toHaveTextContent("at the anchor");
-    expect(screen.queryByRole("button", { name: /Follow acct-8820/ })).not.toBeInTheDocument();
+    expect(screen.getByText("hops 0/2")).toBeInTheDocument();
+    expect(screen.queryByText("acct-8820")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Walk one hop" }));
+    scrollTo(0.4);
     expect(status()).toHaveTextContent("4 counterparties");
+    expect(screen.getByText("acct-8820")).toBeInTheDocument();
     expect(screen.getByText("hops 1/2")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Follow acct-8820 one hop" }));
+    scrollTo(0.9);
     expect(status()).toHaveTextContent("funds path found");
     expect(screen.getByText("funds path")).toBeInTheDocument();
     expect(screen.getByText("hops 2/2")).toBeInTheDocument();
   });
 
-  it("says when a branch returns no path and can walk again", async () => {
-    render(<TraceStage />);
-    await userEvent.click(screen.getByRole("button", { name: "Walk one hop" }));
-    await userEvent.click(screen.getByRole("button", { name: "Follow acct-1013 one hop" }));
-    expect(status()).toHaveTextContent("no path here");
-    expect(screen.queryByText("funds path")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+  it("goes back when the visitor scrolls back up", () => {
+    const scrollTo = renderScrolled(<TraceStage />, 1);
+    expect(status()).toHaveTextContent("funds path found");
+    scrollTo(0);
     expect(status()).toHaveTextContent("at the anchor");
-    expect(screen.queryByRole("button", { name: /Follow/ })).not.toBeInTheDocument();
+  });
+
+  it("has nothing to click", () => {
+    renderScrolled(<TraceStage />, 1);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 });
 
 describe("VerifyStage", () => {
-  it("checks claims one by one and keeps the rejected one visible", async () => {
-    render(<VerifyStage />);
+  it("checks the claims one by one and keeps the rejected one visible", () => {
+    const scrollTo = renderScrolled(<VerifyStage />, 0);
     expect(status()).toHaveTextContent("0 of 3 checked");
 
-    await userEvent.click(screen.getByRole("button", { name: /9,400 USD/ }));
+    scrollTo(0.3);
     expect(status()).toHaveTextContent("1 of 3 checked");
     expect(screen.getByText("supported")).toBeInTheDocument();
     expect(screen.getByText("tx-3f8a")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /sanctions list/ }));
+    scrollTo(0.6);
     expect(screen.getByText("rejected")).toBeInTheDocument();
     expect(screen.getByText("not in records")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /three-hop path/ }));
+    scrollTo(1);
     expect(status()).toHaveTextContent("2 supported · 1 rejected");
+    expect(screen.getByText(/Only supported claims reach the case/)).toBeInTheDocument();
   });
 });
 
 describe("DecideStage", () => {
-  it("appends the analyst decision and never erases an earlier one", async () => {
-    render(<DecideStage />);
+  it("appends evidence and then the analyst's decision, keeping the earlier entries", () => {
+    const scrollTo = renderScrolled(<DecideStage />, 0);
     expect(status()).toHaveTextContent("Review required");
     expect(screen.getByText("Case opened")).toBeInTheDocument();
+    expect(screen.getByText("1 entry")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Confirm case" }));
-    expect(status()).toHaveTextContent("Confirmed");
-    expect(screen.getByText("Analyst confirmed")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(status()).toHaveTextContent("Dismissed");
-    expect(screen.getByText("Analyst confirmed")).toBeInTheDocument();
-    expect(screen.getByText("Analyst dismissed")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+    scrollTo(0.5);
+    expect(screen.getByText("Evidence attached")).toBeInTheDocument();
     expect(status()).toHaveTextContent("Review required");
-    expect(screen.queryByText("Analyst dismissed")).not.toBeInTheDocument();
+
+    scrollTo(1);
+    expect(status()).toHaveTextContent("Confirmed");
+    expect(screen.getByText("Case opened")).toBeInTheDocument();
+    expect(screen.getByText("Evidence attached")).toBeInTheDocument();
+    expect(screen.getByText("Analyst confirmed")).toBeInTheDocument();
+    expect(screen.getByText("3 entries")).toBeInTheDocument();
+  });
+});
+
+describe("outside a teaser", () => {
+  it("shows the finished state, for demos and pages without scrolling", () => {
+    render(<VerifyStage />);
+    expect(status()).toHaveTextContent("2 supported · 1 rejected");
   });
 });

@@ -63,6 +63,82 @@
   color-scheme: dark;
 }
 
+[data-theme="light"],
+.theme-light {
+  --canvas: #fcfcfb;
+  --card: #ffffff;
+  --raised: #f5f4ee;
+  --sunken: #ece9df;
+  --accent: #d96e1e;
+  --accent-ink: #ffffff;
+  --ink: #191919;
+  --ink-soft: #424642;
+  --dim: #6d726d;
+  --safe: #23783a;
+  --warning: #b37400;
+  --critical: #c93b32;
+
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --surface-hover: rgba(0, 0, 0, 0.03);
+  --accent-soft: rgba(217, 110, 30, 0.12);
+
+  --hatch: rgba(0, 0, 0, 0.1);
+  --dot: rgba(217, 110, 30, 0.7);
+
+  --background: var(--canvas);
+  --sidebar: #f8f7f2;
+  --surface: var(--card);
+  --surface-elevated: var(--raised);
+  --surface-sunken: var(--sunken);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-muted: var(--dim);
+  --ring: var(--accent);
+
+  color-scheme: light;
+}
+
+[data-theme="dark"],
+.theme-dark {
+  --canvas: #080909;
+  --card: #141515;
+  --raised: #1b1c1c;
+  --sunken: #0b0c0c;
+  --accent: #f28c38;
+  --accent-ink: #080909;
+  --ink: #e6e7e5;
+  --ink-soft: #a9ada9;
+  --dim: #858985;
+  --safe: #78b887;
+  --warning: #e9b44c;
+  --critical: #ef6a62;
+
+  --line: rgba(230, 231, 229, 0.1);
+  --line-strong: rgba(230, 231, 229, 0.2);
+  --surface-hover: rgba(230, 231, 229, 0.04);
+  --accent-soft: rgba(242, 140, 56, 0.14);
+
+  --hatch: rgba(230, 231, 229, 0.16);
+  --dot: rgba(242, 140, 56, 0.82);
+
+  --background: var(--canvas);
+  --sidebar: #0a0b0b;
+  --surface: var(--card);
+  --surface-elevated: var(--raised);
+  --surface-sunken: var(--sunken);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-soft);
+  --text-muted: var(--dim);
+  --ring: var(--accent);
+
+  color-scheme: dark;
+}
+
 @theme inline {
   /* Landing vocabulary. */
   --color-canvas: var(--canvas);
@@ -72,6 +148,7 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
   --color-dim: var(--dim);
   --color-safe: var(--safe);
   --color-warning: var(--warning);
@@ -236,6 +313,16 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: draw-edge 650ms ease-out 120ms forwards;
+}
+
+/* Landing Cypher sandbox: a bar sweeping across while the query "runs". */
+@keyframes sandbox-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
 }
 
 @keyframes draw-edge {

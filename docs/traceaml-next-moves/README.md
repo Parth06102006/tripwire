@@ -1,8 +1,8 @@
-# TraceAML — Next Moves Planning Pack
+# Tripwire — Next Moves Planning Pack
 
 **Prepared:** 2026-10-16  
 **Planning horizon:** Graph Hacks submission closes 2026-10-18 at 11:59 PM IST  
-**Repository reported:** Tripwire / product TraceAML  
+**Repository reported:** Tripwire / product Tripwire  
 **Reviewed revision:** `84b658b` on `main`  
 **Target track:** Track 1 — Agents That Act on Connected Data
 
@@ -10,16 +10,16 @@ This pack turns the current implementation report into an actionable build, eval
 
 ## Executive decision
 
-Do not redesign TraceAML or add a new model family. Stabilize the benchmark, make the existing graph tools available through a small MCP boundary, connect graph evidence to a controlled investigation action, finish the case-review UI, then run a clean release and demo pass.
+Do not redesign Tripwire or add a new model family. Stabilize the benchmark, make the existing graph tools available through a small MCP boundary, connect graph evidence to a controlled investigation action, finish the case-review UI, then run a clean release and demo pass.
 
-TraceAML's product promise:
+Tripwire's product promise:
 
-> Given a flagged transaction, TraceAML investigates connected money flows through FalkorDB, chooses bounded graph tools, returns a path that a reviewer can verify, and opens or enriches a review case when deterministic policy allows it. It never claims that a graph pattern proves crime, never lets the LLM alter the risk score, and never blocks a real payment.
+> Given a flagged transaction, Tripwire investigates connected money flows through FalkorDB, chooses bounded graph tools, returns a path that a reviewer can verify, and opens or enriches a review case when deterministic policy allows it. It never claims that a graph pattern proves crime, never lets the LLM alter the risk score, and never blocks a real payment.
 
 ## Documents
 
 1. [00 — Current assessment and decisions](00-current-assessment.md) — where the implementation stands, what is aligned, and the main unresolved risks.
-2. [01 — Product and Track 1 alignment](01-product-and-track-alignment.md) — official event requirements translated into TraceAML behavior and acceptance criteria.
+2. [01 — Product and Track 1 alignment](01-product-and-track-alignment.md) — official event requirements translated into Tripwire behavior and acceptance criteria.
 3. [02 — Build plan](02-build-plan.md) — prioritized implementation sequence, dependencies, scope boundaries, and acceptance gates.
 4. [03 — Benchmark plan](03-benchmark-plan.md) — detection metrics, split discipline, test governance, performance and cost protocol.
 5. [04 — Graph tools, MCP, agent and action design](04-agent-mcp-action-design.md) — the minimum architecture that makes graph reasoning and tool selection visible.

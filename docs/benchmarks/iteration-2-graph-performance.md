@@ -5,13 +5,13 @@ Measured 2026-10-16 on the local development machine: Intel Core i5-13400F, 16 l
 Two datasets are used:
 
 - **Real data:** IBM AMLworld HI-Small v8, itself synthetic AML data. Labels are never loaded: the loader's column allowlist excludes `target_is_laundering` and `split`, and `CALL db.propertyKeys()` on the loaded graph lists only allowlisted properties.
-- **Synthetic latency fixture:** `traceaml-synthetic-fixture`, seeded and label-free. Its numbers describe query and load mechanics on graphs of similar size and degree skew. They are not claims about HI-Small.
+- **Synthetic latency fixture:** `Tripwire-synthetic-fixture`, seeded and label-free. Its numbers describe query and load mechanics on graphs of similar size and degree skew. They are not claims about HI-Small.
 
 FalkorDB was shared with other agents during these runs. All figures are serial, single-client latencies; none is a concurrency or capacity test.
 
 ## Protocol
 
-`traceaml-graph-bench` selects anchors from the graph:
+`Tripwire-graph-bench` selects anchors from the graph:
 
 - the iteration-1 case (`--anchor-transactions hi8-tx-03863669`) on real data;
 - the latest transfer of the top 3 out-degree and top 3 in-degree accounts (`high`);
@@ -135,21 +135,21 @@ Graphs were deleted after measurement. Rebuild with:
 
 ```sh
 # Real two-day slice and full graph (HI-Small v8 Parquet from ml prepare)
-uv run --project graph traceaml-load-graph --parquet data/processed/hi-small-v8/transactions.parquet \
+uv run --project graph Tripwire-load-graph --parquet data/processed/hi-small-v8/transactions.parquet \
   --graph-name agentgraph-real-demo --mode create --window-around hi8-tx-03863669 --window-seconds 86400
-uv run --project graph traceaml-load-graph --parquet data/processed/hi-small-v8/transactions.parquet \
+uv run --project graph Tripwire-load-graph --parquet data/processed/hi-small-v8/transactions.parquet \
   --graph-name agentgraph-real-full --mode create
 
 # Synthetic fixtures
-uv run --project graph traceaml-synthetic-fixture --preset demo-1m
-uv run --project graph traceaml-synthetic-fixture --preset full-5m
-uv run --project graph traceaml-load-graph --parquet data/interim/synthetic/demo-1m/transactions.parquet \
+uv run --project graph Tripwire-synthetic-fixture --preset demo-1m
+uv run --project graph Tripwire-synthetic-fixture --preset full-5m
+uv run --project graph Tripwire-load-graph --parquet data/interim/synthetic/demo-1m/transactions.parquet \
   --graph-name agentgraph-opt-1m --mode create
 
 # Benchmarks (JSON under artifacts/benchmarks/)
-uv run --project graph traceaml-graph-bench --graph-name agentgraph-real-demo \
+uv run --project graph Tripwire-graph-bench --graph-name agentgraph-real-demo \
   --anchor-transactions hi8-tx-03863669 --samples 12
-uv run --project graph traceaml-graph-bench --graph-name agentgraph-real-demo \
+uv run --project graph Tripwire-graph-bench --graph-name agentgraph-real-demo \
   --anchor-transactions hi8-tx-03863669 --implementation legacy --warmup 1 --samples 3 --timeout-ms 30000
 ```
 

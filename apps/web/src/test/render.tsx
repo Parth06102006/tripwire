@@ -28,6 +28,9 @@ export function stubApi(route: Route) {
     "fetch",
     vi.fn(async (input: string, init?: RequestInit) => {
       const url = new URL(input, "http://localhost");
+      // The sign-in token request is not an API call under test: answer it as
+      // "sign-in is off" and keep it out of the log.
+      if (url.pathname === "/api/auth/token") return new Response("{}", { status: 404 });
       const body = init?.body ? (JSON.parse(String(init.body)) as unknown) : undefined;
       calls.push({ method: init?.method ?? "GET", path: url.pathname + url.search, body });
       const result = route(url, init);

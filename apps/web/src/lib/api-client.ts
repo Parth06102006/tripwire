@@ -6,6 +6,7 @@
 import type { z } from "zod";
 
 import type { AlertParams } from "@/lib/alert-filters";
+import { authorizedFetch } from "@/lib/auth/fetch";
 import {
   alertsResponseSchema,
   benchmarksResponseSchema,
@@ -13,11 +14,14 @@ import {
   caseListResponseSchema,
   healthSchema,
   investigationResponseSchema,
+  meSchema,
   type CaseCreateRequest,
   type CaseReviewRequest,
   type CaseStatus,
   type InvestigationRequest,
 } from "@/lib/api-schemas";
+
+export type RateLimit = { window: "hour" | "day"; limit: number; retryAfterSeconds: number };
 
 export type ApiErrorKind = "http" | "network" | "invalid_response" | "aborted";
 
@@ -26,9 +30,18 @@ export class ApiError extends Error {
   readonly status: number | null;
   /** The API's fixed `detail` string, when the API sent one. */
   readonly detail: string | null;
+  /** Set on a 429: which allowance ran out and when a slot comes back. */
+  readonly rateLimit: RateLimit | null;
 
-  constructor(kind: ApiErrorKind, message: string, status: number | null, detail: string | null) {
+  constructor(
+    kind: ApiErrorKind,
+    message: string,
+    status: number | null,
+    detail: string | null,
+    rateLimit: RateLimit | null = null,
+  ) {
     super(message);
+    this.rateLimit = rateLimit;
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
@@ -48,19 +61,35 @@ type RequestOptions = {
 
 const API_BASE = "/api";
 
-async function readDetail(response: Response): Promise<string | null> {
+function parseRateLimit(payload: object): RateLimit | null {
+  const { window, limit, retry_after_seconds: retry } = payload as Record<string, unknown>;
+  if (
+    (window === "hour" || window === "day") &&
+    typeof limit === "number" &&
+    typeof retry === "number"
+  ) {
+    return { window, limit, retryAfterSeconds: retry };
+  }
+  return null;
+}
+
+/** The API's error body: its fixed detail string, and the allowance advice on a 429. */
+export async function readErrorBody(
+  response: Response,
+): Promise<{ detail: string | null; rateLimit: RateLimit | null }> {
   try {
     const payload: unknown = await response.json();
     if (payload && typeof payload === "object" && "detail" in payload) {
       const { detail } = payload as { detail: unknown };
-      if (typeof detail === "string") return detail;
+      const rateLimit = response.status === 429 ? parseRateLimit(payload) : null;
+      if (typeof detail === "string") return { detail, rateLimit };
       // FastAPI 422 bodies carry a list of field errors.
-      if (Array.isArray(detail)) return "request failed validation";
+      if (Array.isArray(detail)) return { detail: "request failed validation", rateLimit: null };
     }
   } catch {
     // Non-JSON error bodies (for example a proxy error page) carry no detail.
   }
-  return null;
+  return { detail: null, rateLimit: null };
 }
 
 export async function apiRequest<S extends z.ZodType>(
@@ -70,7 +99,7 @@ export async function apiRequest<S extends z.ZodType>(
 ): Promise<z.output<S>> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, {
+    response = await authorizedFetch(`${API_BASE}${path}`, {
       method,
       signal,
       headers: body === undefined ? undefined : { "content-type": "application/json" },
@@ -88,8 +117,14 @@ export async function apiRequest<S extends z.ZodType>(
   }
 
   if (!response.ok) {
-    const detail = await readDetail(response);
-    throw new ApiError("http", detail ?? `HTTP ${response.status}`, response.status, detail);
+    const { detail, rateLimit } = await readErrorBody(response);
+    throw new ApiError(
+      "http",
+      detail ?? `HTTP ${response.status}`,
+      response.status,
+      detail,
+      rateLimit,
+    );
   }
 
   let payload: unknown;
@@ -125,6 +160,8 @@ function query(params: Record<string, string | number | readonly string[] | unde
 }
 
 export const api = {
+  me: (signal?: AbortSignal) => apiRequest("/me", meSchema, { signal }),
+
   health: (signal?: AbortSignal) => apiRequest("/health", healthSchema, { signal }),
 
   alerts: (params: AlertParams, signal?: AbortSignal) =>
@@ -180,11 +217,32 @@ export function describeApiError(error: unknown): string {
     case "invalid_response":
       return "The API returned data that does not match the agreed contract, so it was not shown.";
     case "http":
-      return describeHttpError(error.status, error.detail);
+      return describeHttpError(error.status, error.detail, error.rateLimit);
   }
 }
 
-function describeHttpError(status: number | null, detail: string | null): string {
+/** "23 minutes", "1 hour 5 minutes": a wait a person can act on. */
+export function formatWait(seconds: number): string {
+  const total = Math.max(1, Math.ceil(seconds / 60));
+  if (total < 60) return `${total} minute${total === 1 ? "" : "s"}`;
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  const hourText = `${hours} hour${hours === 1 ? "" : "s"}`;
+  return minutes === 0 ? hourText : `${hourText} ${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+function describeHttpError(
+  status: number | null,
+  detail: string | null,
+  rateLimit: RateLimit | null,
+): string {
+  if (status === 429) {
+    if (!rateLimit) return "The investigation limit was reached. Try again later.";
+    const per = rateLimit.window === "hour" ? "hour" : "day";
+    return `You have used all ${rateLimit.limit} investigations allowed per ${per}. You can start another in ${formatWait(rateLimit.retryAfterSeconds)}.`;
+  }
+  if (status === 401) return "Your session has ended. Sign in again to continue.";
+  if (status === 403) return "Your account does not have access to this.";
   switch (detail) {
     case "transaction not scored":
       return "This transaction is not in the scored replay cohort.";

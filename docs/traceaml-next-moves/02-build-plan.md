@@ -1,6 +1,6 @@
 # 02 — Prioritized Build Plan
 
-**Objective:** finish TraceAML without expanding scope.  
+**Objective:** finish Tripwire without expanding scope.  
 **Planning assumption:** approximately 48–50 hours remain from the evening of 2026-10-16 until the 2026-10-18 11:59 PM IST submission deadline. Re-check the official schedule before submission: <https://www.wemakedevs.org/hackathons/falkordb/schedule>.
 
 ## 1. Principles for the remaining build

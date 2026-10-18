@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
 import { BrandLockup } from "@/components/landing/brand";
+import { AccountMenu } from "@/components/layout/account-menu";
 import { KeyboardShortcutsModal } from "@/components/layout/keyboard-shortcuts-modal";
-import { ServiceIndicator } from "@/components/layout/service-indicator";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -20,23 +20,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
+      {/* One shortcuts guide for the whole shell; the account menu and "?" open it. */}
+      <KeyboardShortcutsModal showTrigger={false} />
       <aside className="relative z-10 flex shrink-0 flex-col border-b border-border bg-sidebar md:sticky md:top-0 md:h-dvh md:w-56 md:border-r md:border-b-0">
         <div className="flex items-center justify-between gap-3 px-4 py-3 md:block md:px-5 md:pt-5 md:pb-6">
           <BrandLockup subtitle="Workbench" />
-          <div className="flex items-center gap-2 md:hidden">
-            <KeyboardShortcutsModal />
-            <ServiceIndicator compact />
+          <div className="md:hidden">
+            <AccountMenu compact />
           </div>
         </div>
         <SidebarNav />
-        <div className="mt-auto hidden px-5 pb-5 md:block">
-          <div className="mb-3 flex items-center justify-between border-b border-border/50 pb-2.5">
-            <ServiceIndicator compact />
-            <KeyboardShortcutsModal />
-          </div>
-          <p className="text-2xs text-fg-muted">
-            Synthetic IBM AMLworld replay. No real accounts, and no payment is ever blocked.
-          </p>
+        <div className="mt-auto hidden px-3 pb-4 md:block">
+          <AccountMenu />
         </div>
       </aside>
       <main id="main" className="relative z-10 min-w-0 flex-1">
