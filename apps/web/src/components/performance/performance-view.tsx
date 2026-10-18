@@ -1,14 +1,17 @@
 "use client";
 
-import { TriangleAlert } from "lucide-react";
+import { Activity, BarChart3, Cpu, Database, TriangleAlert } from "lucide-react";
 
 import { CapacityPanel } from "@/components/performance/capacity-panel";
 import { CostPanel } from "@/components/performance/cost-panel";
 import { DetectionBenchmarks } from "@/components/performance/detection-benchmarks";
 import { LatencyPanel } from "@/components/performance/latency-panel";
+import { PerformanceKpis } from "@/components/performance/performance-kpis";
+import { ThresholdSimulator } from "@/components/performance/threshold-simulator";
 import { EmptyState, ErrorState, Mono } from "@/components/shared/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBenchmarks } from "@/hooks/use-benchmarks";
 import { describeApiError } from "@/lib/api-client";
 import type { PerformanceSummary } from "@/lib/api-schemas";
@@ -66,9 +69,9 @@ export function PerformanceView() {
   if (benchmarks.isPending) {
     return (
       <div className="space-y-4" aria-busy>
-        <Skeleton className="h-36 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
         <Skeleton className="h-80 w-full" />
-        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
@@ -87,25 +90,78 @@ export function PerformanceView() {
   }
 
   const { models, performance } = benchmarks.data;
+  const hasModels = Object.keys(models).length > 0;
+
   return (
-    <div className="space-y-4">
-      {performance ? <Provenance performance={performance} /> : null}
-      {Object.keys(models).length > 0 ? (
-        <DetectionBenchmarks models={models} />
-      ) : (
-        <EmptyState icon={TriangleAlert} title="No model metrics were served" />
-      )}
-      {performance ? (
-        <>
-          <LatencyPanel performance={performance} />
-          <CapacityPanel performance={performance} />
-          <CostPanel performance={performance} />
-        </>
-      ) : (
-        <EmptyState icon={TriangleAlert} title="No performance snapshot is configured">
-          Set TRACEAML_PERFORMANCE_PATH on the API host to serve latency, capacity and cost.
-        </EmptyState>
-      )}
+    <div className="space-y-6">
+      {/* Executive Hero Scorecards */}
+      {hasModels ? <PerformanceKpis models={models} performance={performance} /> : null}
+
+      {/* Systems Engineering Console Tabs */}
+      <Tabs defaultValue="detection" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="detection">
+            <BarChart3 className="size-3.5" aria-hidden />
+            <span>Detection Models & Simulation</span>
+          </TabsTrigger>
+          <TabsTrigger value="latency">
+            <Database className="size-3.5" aria-hidden />
+            <span>Graph & API Latency</span>
+          </TabsTrigger>
+          <TabsTrigger value="capacity">
+            <Activity className="size-3.5" aria-hidden />
+            <span>Capacity & Concurrency</span>
+          </TabsTrigger>
+          <TabsTrigger value="cost">
+            <Cpu className="size-3.5" aria-hidden />
+            <span>Economics & Run Audit</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="detection" className="space-y-6">
+          {hasModels ? (
+            <>
+              <ThresholdSimulator models={models} />
+              <DetectionBenchmarks models={models} />
+            </>
+          ) : (
+            <EmptyState icon={TriangleAlert} title="No model metrics were served" />
+          )}
+        </TabsContent>
+
+        <TabsContent value="latency" className="space-y-4">
+          {performance ? (
+            <LatencyPanel performance={performance} />
+          ) : (
+            <EmptyState icon={TriangleAlert} title="No latency snapshot configured">
+              Set TRACEAML_PERFORMANCE_PATH on the API host to serve latency benchmarks.
+            </EmptyState>
+          )}
+        </TabsContent>
+
+        <TabsContent value="capacity" className="space-y-4">
+          {performance ? (
+            <CapacityPanel performance={performance} />
+          ) : (
+            <EmptyState icon={TriangleAlert} title="No capacity sweep recorded">
+              Set TRACEAML_PERFORMANCE_PATH on the API host to serve concurrency sweeps.
+            </EmptyState>
+          )}
+        </TabsContent>
+
+        <TabsContent value="cost" className="space-y-4">
+          {performance ? (
+            <>
+              <CostPanel performance={performance} />
+              <Provenance performance={performance} />
+            </>
+          ) : (
+            <EmptyState icon={TriangleAlert} title="No performance snapshot is configured">
+              Set TRACEAML_PERFORMANCE_PATH on the API host to serve compute economics.
+            </EmptyState>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
