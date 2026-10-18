@@ -30,7 +30,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
   return (
     <Modal
       open={open}
-      title={submitted ? "Demo Requested" : "Request a Demo of Tripwire"}
+      title={submitted ? "Demo Requested" : "Request a demo of Tripwire"}
       onClose={onClose}
     >
       {submitted ? (
@@ -38,12 +38,11 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-safe/10 text-safe ring-1 ring-safe/30">
             <CheckCircle2 aria-hidden="true" className="h-6 w-6" />
           </div>
-          <h3 className="mt-4 text-[17px] font-semibold text-white">Briefing scheduled</h3>
+          <h3 className="mt-4 text-[17px] font-semibold text-white">Request received</h3>
           <p className="mt-2 max-w-sm text-[13px] leading-6 text-dim">
-            Thank you, <span className="font-medium text-white">{name || "Analyst"}</span>. Our
-            financial crime intelligence engineering team will contact{" "}
-            <span className="font-medium text-accent">{email}</span> within 4 business hours with
-            replay sandbox credentials.
+            Thanks, <span className="font-medium text-white">{name || "Analyst"}</span>. We will
+            reply to <span className="font-medium text-accent">{email}</span> to arrange a
+            walkthrough. The workbench stays open in the meantime.
           </p>
 
           <div className="mt-6 flex w-full flex-col gap-2.5">
@@ -51,7 +50,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
               href="/overview"
               className="inline-flex items-center justify-center gap-2 rounded-control bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink hover:brightness-110"
             >
-              Explore Live Workbench Now
+              Open the workbench
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </a>
             <button
@@ -66,8 +65,8 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <p className="text-[12px] leading-5 text-dim">
-            See how Tripwire executes bounded Cypher investigations over IBM AMLworld data with zero
-            LLM hallucination.
+            Walk through a bounded Cypher investigation over the synthetic IBM AMLworld replay, with
+            every claim checked against the records it cites.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -162,7 +161,7 @@ export function DemoModal({ open, onClose }: DemoModalProps) {
               type="submit"
               className="inline-flex items-center gap-1.5 rounded-control bg-accent px-4 py-1.5 text-xs font-semibold text-accent-ink shadow-sm hover:brightness-110"
             >
-              Submit Request
+              Submit request
               <ArrowRight aria-hidden="true" className="h-3 w-3" />
             </button>
           </div>

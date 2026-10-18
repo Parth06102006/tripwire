@@ -117,7 +117,7 @@ test("landing page opens the workbench and shares its theme", async ({ page }) =
   // The hero link, not the collapsed mobile menu copy that sits under the header.
   await page
     .locator("main")
-    .getByRole("link", { name: /Launch Workbench/i })
+    .getByRole("link", { name: /Open the workbench/i })
     .first()
     .click();
   await expect(page).toHaveURL(/\/overview$/);

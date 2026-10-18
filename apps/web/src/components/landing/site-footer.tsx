@@ -14,17 +14,16 @@ const API_DOCS_URL =
   (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8000/docs" : undefined);
 
 const PLATFORM_LINKS = [
-  { label: "Live Workbench", href: WORKBENCH_HREF, external: true },
-  { label: "Alert Queue", href: WORKBENCH_HREF },
-  { label: "Graph Investigation", href: DEMO_HREF },
+  { label: "Open the workbench", href: WORKBENCH_HREF, external: true },
+  { label: "Investigation", href: DEMO_HREF },
   { label: "Performance", href: PERFORMANCE_HREF },
 ] as const;
 
-const INVARIANT_LINKS = [
-  { label: "Graph Authority", href: "#product" },
-  { label: "Typology Engine", href: "#typologies" },
+const PRINCIPLE_LINKS = [
+  { label: "Graph evidence", href: "#product" },
+  { label: "Typologies", href: "#typologies" },
   { label: "Bounded Cypher", href: "#sandbox" },
-  { label: "Evaluation Isolation", href: "#benchmarks" },
+  { label: "Benchmark protocol", href: "#benchmarks" },
 ] as const;
 
 const LINK_CLASS = "transition-colors hover:text-white";
@@ -98,9 +97,9 @@ export default function SiteFooter() {
             </div>
 
             <p className="max-w-sm font-sans text-[14px] leading-relaxed text-zinc-400">
-              Graph-powered anti-money laundering detection and transaction topology intelligence
-              over FalkorDB with bounded Cypher investigations and deterministic policy
-              verification.
+              Graph-powered AML detection and investigation over a synthetic IBM AMLworld replay:
+              bounded Cypher on FalkorDB, an agent that cites records, and deterministic policy on
+              every decision.
             </p>
 
             <ServiceStatus />
@@ -127,12 +126,12 @@ export default function SiteFooter() {
             </ul>
           </nav>
 
-          <nav aria-label="Invariants" className="space-y-3 md:col-span-2">
+          <nav aria-label="Principles" className="space-y-3 md:col-span-2">
             <div className="font-mono text-[11px] font-bold tracking-wider text-white uppercase">
-              Invariants
+              Principles
             </div>
             <ul className="space-y-2">
-              {INVARIANT_LINKS.map((link) => (
+              {PRINCIPLE_LINKS.map((link) => (
                 <li key={link.href}>
                   <a href={link.href} className={LINK_CLASS}>
                     {link.label}
@@ -188,8 +187,8 @@ export default function SiteFooter() {
         </div>
 
         <div className="flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-6 text-[11px] text-zinc-600 sm:flex-row">
-          <div>Tripwire · Synthetic IBM AMLworld Workbench · FalkorDB</div>
-          <div>Zero emoji · Strict TypeScript · Bounded Execution</div>
+          <div>Tripwire · Synthetic IBM AMLworld replay · FalkorDB</div>
+          <div>Bounded queries · Cited evidence · Human review</div>
         </div>
       </div>
     </footer>

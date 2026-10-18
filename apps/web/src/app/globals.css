@@ -325,6 +325,17 @@
   background-position: center;
 }
 
+/* Interactive step stages: a faint dot matrix behind the demo content, the
+   background the static step SVGs used to carry. */
+.stage-grid {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(230, 231, 229, 0.07) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+}
+
 /* Scroll reveal. Elements stay visible without JavaScript. */
 [data-reveal] {
   transition:

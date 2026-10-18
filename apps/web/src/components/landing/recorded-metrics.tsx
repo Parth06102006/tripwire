@@ -15,28 +15,40 @@ interface Tile {
 const FALLBACK_TILES: readonly Tile[] = [
   {
     label: "Average precision",
-    value: "0.942",
-    note: "Best recorded, threshold-free · LightGBM (graph)",
+    value: "0.7525",
+    note: "Best recorded, threshold free · C1, all seven families",
   },
   {
-    label: "Recall at 1% budget",
-    value: "0.886",
-    note: "Top 1.0% alert capacity · 88.6% fraud captured",
+    label: "Recall at fixed budget",
+    value: "0.4773",
+    note: "Top 0.1% of alerts, review capacity",
   },
   {
     label: "Frozen test cohort",
-    value: "76,820",
-    note: "0.428% labelled positive, scored once",
+    value: "761,639",
+    note: "0.205% labelled positive, scored once",
   },
   {
     label: "Models compared",
-    value: "3",
-    note: "One frozen cohort, chronological split",
+    value: "4",
+    note: "One frozen cohort, one protocol",
   },
 ];
 
 function scoreOrDash(value: number | undefined): string {
   return value === undefined || !Number.isFinite(value) ? "—" : formatScore(value);
+}
+
+/** Human names for the artifact's model keys, matching the Performance screen. */
+const MODEL_NOTES: Record<string, string> = {
+  c1: "C1, all seven families",
+  c2: "C2, all seven families except the account registry",
+  c3: "C3, Iteration 1 features with regularization",
+  iteration1_lgbm: "Iteration 1 LightGBM baseline",
+};
+
+function modelNote(name: string): string {
+  return MODEL_NOTES[name] ?? name;
 }
 
 function bestByAveragePrecision(
@@ -70,10 +82,10 @@ export default function RecordedMetrics() {
   }
 
   let tiles: Tile[] = [...FALLBACK_TILES];
-  let datasetLabel = "IBM AMLworld HI-Small";
-  let measuredOn = "2026-10-14";
-  let hardware = "Apple M-series / Linux FalkorDB 1.0";
-  let runId = "rec-aml-20261014";
+  let datasetLabel = "Synthetic IBM AMLworld HI-Small v8";
+  let measuredOn = "2026-10-16";
+  let hardware = "Intel Core i5-13400F, 16 threads, 15.8 GiB RAM";
+  let runId = "20261016T083449Z";
   let isLiveArtifact = false;
 
   if (query.data && query.data.models) {
@@ -88,7 +100,7 @@ export default function RecordedMetrics() {
         {
           label: "Average precision",
           value: scoreOrDash(benchmark.average_precision.test),
-          note: `Best recorded, threshold free · ${name}`,
+          note: `Best recorded, threshold free · ${modelNote(name)}`,
         },
         {
           label: "Recall at fixed budget",

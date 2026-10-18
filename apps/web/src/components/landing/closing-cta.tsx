@@ -26,7 +26,7 @@ export default function ClosingCta() {
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-[15px] leading-7 text-dim">
               Run a bounded investigation on the synthetic replay and read the evidence before you
-              decide anything.
+              decide.
             </p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
               <CtaLink href={WORKBENCH_HREF} size="lg">
@@ -37,7 +37,7 @@ export default function ClosingCta() {
                 View recorded benchmarks
               </CtaLink>
               <CtaLink href={DEMO_HREF} variant="quiet" size="lg">
-                Watch a replay investigation
+                Open an investigation
               </CtaLink>
             </div>
           </div>

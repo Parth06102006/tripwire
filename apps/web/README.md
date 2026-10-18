@@ -61,20 +61,23 @@ src/lib/graph/              Graph model, deterministic layout, React Flow mappin
 
 ## Sticky teaser scroll
 
-`src/components/ui/sticky-teaser-scroll.tsx` is a reusable split-screen section: teasers scroll on one side while one image stays pinned on the other and swaps to the active teaser. The landing page uses it for "How it works" (`src/components/landing/how-it-works.tsx`); `/demo/sticky-teaser` shows it with picsum photos (`?side=left`, `?scrubbed=1`).
+`src/components/ui/sticky-teaser-scroll.tsx` is a reusable split-screen section: teasers scroll on one side while one panel stays pinned on the other and swaps to the active teaser. A panel is either a static `image` or a `visual`, any node. The landing page uses it for "How it works" (`src/components/landing/how-it-works.tsx`) with the four interactive stages from `src/components/landing/how-it-works-stages.tsx`; `/demo/sticky-teaser` shows it with picsum photos (`?side=left`, `?scrubbed=1`).
 
-It is data-driven: pass `items` (`id`, `title`, `description`, `image`, and optionally `eyebrow`, `href`, `linkLabel`) and nothing else changes when items are added or removed. Pass a stable array, such as a module constant, so the observer is not rebuilt on every render.
+It is data-driven: pass `items` (`id`, `title`, `description`, and an `image` or a `visual`, plus optionally `eyebrow`, `href`, `linkLabel`) and nothing else changes when items are added or removed. Pass a stable array, such as a module constant, so the observer is not rebuilt on every render. Below 992px the panel is rendered again above the teaser text, and `display: none` keeps the hidden copy out of the tab order.
 
 | To change                     | Do this                                                                                                                  |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Swap timing or easing         | Edit `SWAP_DURATION` and `EASE` at the top of the component.                                                             |
 | Where a teaser becomes active | Set `activeOffset` (0 is the top of the viewport, 0.5 the middle, 1 the bottom). The default is 0.5.                     |
-| Image shape                   | Set `aspectClassName`, for example `aspect-square` or `aspect-[3/4]`. The default is `aspect-[4/5]`.                     |
+| Panel shape                   | Set `aspectClassName`, for example `aspect-square` or `aspect-[3/4]`. The default is `aspect-[4/5]`.                     |
+| Frame above the text on phones | Set `mobileAspectClassName`. It takes any Tailwind class, such as `aspect-[4/5] min-h-[30rem]`. The default is `aspect-[4/3]`. |
 | Pin below a fixed header      | Set `stickyTop` in pixels. The landing page passes the 72px header height.                                               |
 | Scroll-scrubbed crossfade     | Set `scrubbed`. Opacity and scale then follow each teaser's own scroll progress instead of swapping on the active index. |
-| Image side                    | Set `imageSide` to `"left"` or `"right"`.                                                                                |
+| Panel side                    | Set `imageSide` to `"left"` or `"right"`.                                                                                 |
 
-Pinning needs the page to be the scroll container, so no ancestor may set `overflow: hidden`, `auto` or `scroll`. Use `overflow-x: clip` to stop sideways scroll. Below 992px the pinning is off and each teaser shows its own image. Step images for the landing page are static files under `public/how-it-works/`.
+Pinning needs the page to be the scroll container, so no ancestor may set `overflow: hidden`, `auto` or `scroll`. Use `overflow-x: clip` to stop sideways scroll. Below 992px the pinning is off and each teaser shows its own panel above its text.
+
+Steps that demonstrate a behaviour are stages, not pictures. Each stage has one idea and one control, states its own limitation ("illustrative", "simulated", "no path here"), and a hint line that answers what the visitor just did. Keep the panel legible at the pinned width: mono micro-labels, 13px body text and a dot matrix background, with the status in the header chip.
 
 ## Dependencies
 

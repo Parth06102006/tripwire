@@ -19,7 +19,7 @@ const ITEMS = [
   {
     icon: Scale,
     title: "Policy owns the call",
-    body: "Models produce scores. Deterministic policy maps them to allow, review or simulated block.",
+    body: "Models produce scores. Deterministic policy maps them to allow, review or a simulated block.",
   },
 ] as const;
 
