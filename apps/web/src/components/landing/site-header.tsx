@@ -8,17 +8,13 @@ import { BrandLockup } from "./brand";
 import { CtaArrow, CtaLink } from "./cta";
 import { signOutAndLeave } from "@/lib/auth/sign-out";
 import { useAuthStatus } from "@/lib/auth/use-auth-status";
-import { DEMO_HREF, NAV_LINKS, SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
-
-interface SiteHeaderProps {
-  onRequestDemo?: () => void;
-}
+import { DEMO_VIDEO_URL, NAV_LINKS, SIGN_IN_HREF, SIGN_UP_HREF } from "./links";
 
 /**
  * Landing navigation matching the baseline screenshot:
  * Crisp typography, brand lockup, section navigation, and distinct CTA buttons.
  */
-export default function SiteHeader({ onRequestDemo }: SiteHeaderProps) {
+export default function SiteHeader() {
   const [open, setOpen] = useState(false);
   // Signed out: Sign in and Sign up. Signed in: Sign out. Sign-in off: neither.
   const status = useAuthStatus();
@@ -110,21 +106,15 @@ export default function SiteHeader({ onRequestDemo }: SiteHeaderProps) {
             </>
           )}
 
-          {onRequestDemo ? (
-            <button
-              type="button"
-              onClick={onRequestDemo}
-              className="hidden items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink shadow-[0_12px_32px_-14px_rgba(242,140,56,0.85)] hover:brightness-110 sm:inline-flex"
-            >
-              Request a demo
-              <CtaArrow />
-            </button>
-          ) : (
-            <CtaLink href={DEMO_HREF} variant="primary" size="sm" className="hidden sm:inline-flex">
-              Request a demo
-              <CtaArrow />
-            </CtaLink>
-          )}
+          <CtaLink
+            href={DEMO_VIDEO_URL}
+            variant="primary"
+            size="sm"
+            className="hidden sm:inline-flex"
+          >
+            View Demo
+            <CtaArrow />
+          </CtaLink>
 
           <button
             type="button"
@@ -167,17 +157,10 @@ export default function SiteHeader({ onRequestDemo }: SiteHeaderProps) {
               )}
             </nav>
             <div className="mt-5 flex flex-col gap-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  if (onRequestDemo) onRequestDemo();
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-full bg-accent py-2.5 text-sm font-semibold text-accent-ink"
-              >
-                Request a demo
+              <CtaLink href={DEMO_VIDEO_URL} onClick={() => setOpen(false)}>
+                View Demo
                 <CtaArrow />
-              </button>
+              </CtaLink>
               {canEnter ? (
                 signedIn ? (
                   <button

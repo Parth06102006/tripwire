@@ -7,6 +7,8 @@ import { renderWithClient } from "@/test/render";
 import Hero from "./hero";
 import SiteHeader from "./site-header";
 
+const DEMO_VIDEO_URL = "https://youtu.be/EI_i-Osb0kg";
+
 const signOut = vi.fn(async () => ({ data: null, error: null }));
 vi.mock("@/lib/auth/client", () => ({ authClient: { signOut: () => signOut() } }));
 
@@ -40,7 +42,7 @@ const header = () => screen.getByRole("banner");
 describe("landing header", () => {
   it("links only to Docs in the middle", async () => {
     session("signed-out");
-    renderWithClient(<SiteHeader onRequestDemo={() => {}} />);
+    renderWithClient(<SiteHeader />);
     const sections = within(header()).getAllByRole("navigation", { name: "Sections" });
     for (const nav of sections) {
       const links = within(nav)
@@ -53,22 +55,26 @@ describe("landing header", () => {
     }
   });
 
-  it("offers Sign in, Sign up and Request a demo to a visitor who is signed out", async () => {
+  it("offers Sign in, Sign up and View Demo to a visitor who is signed out", async () => {
     session("signed-out");
-    renderWithClient(<SiteHeader onRequestDemo={() => {}} />);
+    renderWithClient(<SiteHeader />);
     expect(await within(header()).findAllByRole("link", { name: "Sign in" })).not.toHaveLength(0);
     expect(within(header()).getAllByRole("link", { name: "Sign up" })[0]).toHaveAttribute(
       "href",
       "/login?mode=signup",
     );
-    expect(screen.getAllByRole("button", { name: /Request a demo/ }).length).toBeGreaterThan(0);
+    const demoLinks = within(header()).getAllByRole("link", { name: /View Demo/ });
+    expect(demoLinks.length).toBeGreaterThan(0);
+    for (const link of demoLinks) {
+      expect(link).toHaveAttribute("href", DEMO_VIDEO_URL);
+    }
     expect(screen.queryByRole("button", { name: /Sign out/ })).toBeNull();
     expect(screen.queryByText(/Contact us/)).toBeNull();
   });
 
   it("gives a signed-in visitor a way to sign out, and no workbench button", async () => {
     session("signed-in");
-    renderWithClient(<SiteHeader onRequestDemo={() => {}} />);
+    renderWithClient(<SiteHeader />);
     const out = await within(header()).findAllByRole("button", { name: /Sign out/ });
     expect(within(header()).queryByRole("link", { name: "Open the workbench" })).toBeNull();
     expect(within(header()).queryByRole("link", { name: "Sign up" })).toBeNull();
@@ -79,13 +85,13 @@ describe("landing header", () => {
 
   it("with sign-in off, has no sign-in buttons, no sign out and no workbench button", async () => {
     session("off");
-    renderWithClient(<SiteHeader onRequestDemo={() => {}} />);
+    renderWithClient(<SiteHeader />);
     await vi.waitFor(() =>
       expect(within(header()).queryByRole("link", { name: "Sign in" })).toBeNull(),
     );
     expect(screen.queryByRole("button", { name: /Sign out/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open the workbench" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: /Request a demo/ }).length).toBeGreaterThan(0);
+    expect(within(header()).getAllByRole("link", { name: /View Demo/ }).length).toBeGreaterThan(0);
   });
 });
 
@@ -93,7 +99,7 @@ describe("hero", () => {
   it("has one way in: Get started, to the sign-in page", () => {
     render(<Hero />);
     expect(screen.getByRole("link", { name: /Get started/ })).toHaveAttribute("href", "/login");
-    expect(screen.queryByRole("button", { name: /Request a demo/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /View Demo/ })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open the workbench" })).toBeNull();
     expect(screen.queryByText(/Contact us/)).toBeNull();
   });
