@@ -70,7 +70,7 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
             href={WORKBENCH_HREF}
             className="mr-1 hidden items-center font-mono text-[12px] text-dim transition-colors hover:text-accent xl:inline-flex"
           >
-            Live Workbench
+            Open the workbench
           </Link>
 
           {onContact ? (
@@ -98,12 +98,12 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
               onClick={onRequestDemo}
               className="hidden items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-ink shadow-[0_12px_32px_-14px_rgba(242,140,56,0.85)] hover:brightness-110 sm:inline-flex"
             >
-              Request a Demo
+              Request a demo
               <CtaArrow />
             </button>
           ) : (
             <CtaLink href={DEMO_HREF} variant="primary" size="sm" className="hidden sm:inline-flex">
-              Request a Demo
+              Request a demo
               <CtaArrow />
             </CtaLink>
           )}
@@ -143,7 +143,7 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
                 onClick={() => setOpen(false)}
                 className="border-b border-line py-3 text-sm text-accent transition-colors"
               >
-                Launch Workbench
+                Open the workbench
               </Link>
             </nav>
             <div className="mt-5 flex flex-col gap-2.5">
@@ -155,7 +155,7 @@ export default function SiteHeader({ onRequestDemo, onContact }: SiteHeaderProps
                 }}
                 className="flex items-center justify-center gap-1.5 rounded-full bg-accent py-2.5 text-sm font-semibold text-accent-ink"
               >
-                Request a Demo
+                Request a demo
                 <CtaArrow />
               </button>
               <button

@@ -27,7 +27,7 @@ export function ContactModal({ open, onClose }: ContactModalProps) {
   return (
     <Modal
       open={open}
-      title={submitted ? "Message Received" : "Contact the Tripwire Team"}
+      title={submitted ? "Message Received" : "Contact the Tripwire team"}
       onClose={onClose}
     >
       {submitted ? (
@@ -35,10 +35,9 @@ export function ContactModal({ open, onClose }: ContactModalProps) {
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-safe/10 text-safe ring-1 ring-safe/30">
             <CheckCircle2 aria-hidden="true" className="h-6 w-6" />
           </div>
-          <h3 className="mt-4 text-[17px] font-semibold text-white">Inquiry dispatched</h3>
+          <h3 className="mt-4 text-[17px] font-semibold text-white">Message sent</h3>
           <p className="mt-2 max-w-sm text-[13px] leading-6 text-dim">
-            Thank you. An engineering owner from the TraceAML architecture group will reply to{" "}
-            <span className="font-medium text-accent">{email}</span> within 24 hours.
+            Thanks. The team will reply to <span className="font-medium text-accent">{email}</span>.
           </p>
           <button
             type="button"
@@ -51,8 +50,7 @@ export function ContactModal({ open, onClose }: ContactModalProps) {
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <p className="text-[12px] leading-5 text-dim">
-            Direct channel to Tripwire’s frontend, FalkorDB engineering, ML evaluation and backend
-            team.
+            A direct line to the team behind Tripwire: frontend, graph, evaluation and API.
           </p>
 
           <div className="flex flex-col gap-1.5 text-xs text-dim">
@@ -97,7 +95,7 @@ export function ContactModal({ open, onClose }: ContactModalProps) {
               type="submit"
               className="inline-flex items-center gap-1.5 rounded-control bg-accent px-4 py-1.5 text-xs font-semibold text-accent-ink shadow-sm hover:brightness-110"
             >
-              Send Message
+              Send message
               <ArrowRight aria-hidden="true" className="h-3 w-3" />
             </button>
           </div>
