@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithClient, stubApi } from "@/test/render";
 
+import { EMPTY_DRAFT } from "@/lib/alert-filters";
 import { AlertQueue } from "./alert-queue";
 
 const push = vi.fn();
@@ -43,9 +44,24 @@ describe("AlertQueue", () => {
 
     const link = await screen.findByRole("link", { name: "tx-high" });
     expect(link).toHaveAttribute("href", "/investigation/tx-high");
-    expect(screen.getByText("Rows 1 to 2 of 2, highest score first")).toBeInTheDocument();
+    expect(
+      screen.getByText("2 of 2 scored transactions match, highest score first"),
+    ).toBeInTheDocument();
     const row = link.closest("tr");
     expect(row && within(row).getByText("Flagged for review")).toBeInTheDocument();
+  });
+
+  it("defaults to flagged_for_review route", async () => {
+    const calls = stubApi((url) =>
+      url.pathname === "/api/alerts"
+        ? { body: { items, total: 2, limit: 50, offset: 0 } }
+        : undefined,
+    );
+    renderWithClient(<AlertQueue />);
+    await screen.findByText("tx-high");
+    expect(calls[0]?.path).toContain("route=flagged_for_review");
+    const chip = screen.getByRole("button", { name: /Flagged for review/ });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
   });
 
   it("keeps an alert missing from the graph in the queue and marks it", async () => {
@@ -79,7 +95,7 @@ describe("AlertQueue", () => {
           }
         : undefined,
     );
-    renderWithClient(<AlertQueue />);
+    renderWithClient(<AlertQueue initialDraft={EMPTY_DRAFT} />);
     await screen.findByText("tx-high");
 
     const chip = screen.getByRole("button", { name: /Flagged for review/ });

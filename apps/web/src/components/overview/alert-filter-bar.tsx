@@ -11,8 +11,8 @@ import { cn } from "@/lib/cn";
 import { formatInteger } from "@/lib/formatters";
 
 const ROUTE_CHIP: Record<ModelRoute, { label: string; dot: string }> = {
-  blocked_by_rule: { label: "Blocked by rule", dot: "bg-critical" },
   flagged_for_review: { label: "Flagged for review", dot: "bg-warning" },
+  blocked_by_rule: { label: "Blocked by rule", dot: "bg-critical" },
   standard_path: { label: "Standard path", dot: "bg-fg-muted" },
 };
 

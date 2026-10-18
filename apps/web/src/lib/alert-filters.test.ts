@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeFilterCount, EMPTY_DRAFT, resolveFilters } from "./alert-filters";
+import { activeFilterCount, DEFAULT_DRAFT, EMPTY_DRAFT, resolveFilters } from "./alert-filters";
 
 describe("resolveFilters", () => {
   it("sends nothing for an empty draft", () => {
@@ -8,6 +8,13 @@ describe("resolveFilters", () => {
     expect(params).toEqual({});
     expect(problems).toEqual({ score: null, date: null });
     expect(activeFilterCount(params)).toBe(0);
+  });
+
+  it("defaults to flagged_for_review in DEFAULT_DRAFT", () => {
+    const { params, problems } = resolveFilters(DEFAULT_DRAFT);
+    expect(params.routes).toEqual(["flagged_for_review"]);
+    expect(problems).toEqual({ score: null, date: null });
+    expect(activeFilterCount(params)).toBe(1);
   });
 
   it("keeps routes in queue order and trims the text", () => {

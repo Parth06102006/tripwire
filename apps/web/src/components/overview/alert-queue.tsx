@@ -33,6 +33,7 @@ import { useAlerts } from "@/hooks/use-alerts";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   activeFilterCount,
+  DEFAULT_DRAFT,
   EMPTY_DRAFT,
   resolveFilters,
   type FilterDraft,
@@ -150,16 +151,18 @@ export function AlertQueue({
   className,
   selectedAlertId,
   onSelectAlert,
+  initialDraft = DEFAULT_DRAFT,
 }: {
   className?: string;
   selectedAlertId?: string | null;
   onSelectAlert?: (alert: AlertItem | null) => void;
+  initialDraft?: FilterDraft;
 }) {
   const router = useRouter();
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState(0);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [draft, setDraft] = useState<FilterDraft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<FilterDraft>(initialDraft);
   const text = useDebouncedValue(draft.text, 250);
 
   const { params: filters, problems } = resolveFilters({ ...draft, text });
@@ -252,13 +255,15 @@ export function AlertQueue({
           >
             <button
               type="button"
-              onClick={() => applyPreset("all")}
+              onClick={() => applyPreset("review")}
               className={cn(
                 "rounded px-2 py-1 text-2xs font-medium transition-colors",
-                activeCount === 0 ? "bg-surface-elevated text-fg" : "text-fg-muted hover:text-fg",
+                draft.routes.length === 1 && draft.routes[0] === "flagged_for_review"
+                  ? "bg-warning/20 text-warning"
+                  : "text-fg-muted hover:text-warning",
               )}
             >
-              All
+              Review
             </button>
             <button
               type="button"
@@ -274,18 +279,6 @@ export function AlertQueue({
             </button>
             <button
               type="button"
-              onClick={() => applyPreset("review")}
-              className={cn(
-                "rounded px-2 py-1 text-2xs font-medium transition-colors",
-                draft.routes.length === 1 && draft.routes[0] === "flagged_for_review"
-                  ? "bg-warning/20 text-warning"
-                  : "text-fg-muted hover:text-warning",
-              )}
-            >
-              Review
-            </button>
-            <button
-              type="button"
               onClick={() => applyPreset("blocked")}
               className={cn(
                 "rounded px-2 py-1 text-2xs font-medium transition-colors",
@@ -295,6 +288,16 @@ export function AlertQueue({
               )}
             >
               Rule block
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("all")}
+              className={cn(
+                "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                activeCount === 0 ? "bg-surface-elevated text-fg" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              All
             </button>
           </div>
           <TransactionLookup />

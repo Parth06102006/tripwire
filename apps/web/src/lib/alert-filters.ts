@@ -27,8 +27,8 @@ export type FilterDraft = {
 };
 
 export const ROUTE_ORDER: readonly ModelRoute[] = [
-  "blocked_by_rule",
   "flagged_for_review",
+  "blocked_by_rule",
   "standard_path",
 ];
 
@@ -39,6 +39,11 @@ export const EMPTY_DRAFT: FilterDraft = {
   dateFrom: "",
   dateTo: "",
   text: "",
+};
+
+export const DEFAULT_DRAFT: FilterDraft = {
+  ...EMPTY_DRAFT,
+  routes: ["flagged_for_review"],
 };
 
 function parseScore(raw: string): number | "invalid" | undefined {
