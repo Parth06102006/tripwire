@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { AlertQueue } from "@/components/overview/alert-queue";
-import { OperationalStatus } from "@/components/overview/operational-status";
 import { OverviewKpis } from "@/components/overview/overview-kpis";
+import { OverviewView } from "@/components/overview/overview-view";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -23,12 +22,7 @@ export default function OverviewPage() {
       <div className="px-4 pb-3 md:px-8">
         <OverviewKpis />
       </div>
-      <div className="grid gap-4 px-4 pb-6 md:px-8 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[minmax(0,1fr)]">
-        <AlertQueue className="h-[75dvh] xl:h-full" />
-        <div className="xl:min-h-0 xl:overflow-y-auto">
-          <OperationalStatus />
-        </div>
-      </div>
+      <OverviewView />
     </div>
   );
 }

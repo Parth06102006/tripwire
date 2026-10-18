@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  Eye,
   Filter,
 } from "lucide-react";
 import Link from "next/link";
@@ -46,69 +47,98 @@ type Row = AlertItem & { rank: number };
 const PAGE_SIZES = [25, 50, 100, 200] as const;
 const column = createColumnHelper<Row>();
 
-const columns = [
-  column.accessor("rank", {
-    header: "Rank",
-    cell: (info) => <span className="text-fg-muted">{formatInteger(info.getValue())}</span>,
-  }),
-  column.accessor("transaction_id", {
-    header: "Transaction",
-    cell: (info) => (
-      <span className="flex items-center gap-2">
-        <Link
-          href={investigationHref(info.getValue())}
-          className="rounded-sm text-fg underline-offset-2 hover:text-accent hover:underline"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Mono>{info.getValue()}</Mono>
-        </Link>
-        {/* Shown, never hidden: a flagged alert stays visible even when the
-            graph is missing it, so the gap gets fixed rather than lost. */}
-        {info.row.original.graph_status === "missing" ? (
-          <Badge
-            tone="review"
-            title="This transaction is not in the loaded graph, so the agent cannot investigate it."
+function buildColumns(onSelectAlert?: (alert: AlertItem) => void, selectedAlertId?: string | null) {
+  return [
+    column.accessor("rank", {
+      header: "Rank",
+      cell: (info) => <span className="text-fg-muted">{formatInteger(info.getValue())}</span>,
+    }),
+    column.accessor("transaction_id", {
+      header: "Transaction",
+      cell: (info) => (
+        <span className="flex items-center gap-2">
+          <Link
+            href={investigationHref(info.getValue())}
+            className="rounded-sm text-fg underline-offset-2 hover:text-accent hover:underline"
+            onClick={(event) => event.stopPropagation()}
           >
-            Not in graph
-          </Badge>
-        ) : null}
-      </span>
-    ),
-  }),
-  column.accessor("timestamp", {
-    header: "Timestamp",
-    cell: (info) => (
-      <span className="text-fg-secondary">{formatSourceTimestamp(info.getValue())}</span>
-    ),
-  }),
-  column.accessor("score", {
-    header: "Score",
-    cell: (info) => {
-      const score = info.getValue();
-      return (
-        <span className="flex items-center gap-2.5">
-          <span className="w-14 text-fg">{formatScore(score)}</span>
-          <span
-            className="hidden h-1 w-16 overflow-hidden rounded-full bg-surface-elevated sm:block"
-            aria-hidden
-          >
+            <Mono>{info.getValue()}</Mono>
+          </Link>
+          {info.row.original.graph_status === "missing" ? (
+            <Badge
+              tone="review"
+              title="This transaction is not in the loaded graph, so the agent cannot investigate it."
+            >
+              Not in graph
+            </Badge>
+          ) : null}
+        </span>
+      ),
+    }),
+    column.accessor("timestamp", {
+      header: "Timestamp",
+      cell: (info) => (
+        <span className="text-fg-secondary">{formatSourceTimestamp(info.getValue())}</span>
+      ),
+    }),
+    column.accessor("score", {
+      header: "Score",
+      cell: (info) => {
+        const score = info.getValue();
+        const isCritical = score >= 0.85 || info.row.original.route === "blocked_by_rule";
+        return (
+          <span className="flex items-center gap-2.5">
             <span
               className={cn(
-                "block h-full",
-                info.row.original.decision === "review" ? "bg-warning" : "bg-fg-muted",
+                "w-14 font-mono font-medium",
+                isCritical ? "text-critical" : score >= 0.5 ? "text-warning" : "text-fg",
               )}
-              style={{ width: `${Math.max(2, score * 100)}%` }}
-            />
+            >
+              {formatScore(score)}
+            </span>
+            <span
+              className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-surface-elevated sm:block"
+              aria-hidden
+            >
+              <span
+                className={cn(
+                  "block h-full transition-all",
+                  isCritical ? "bg-critical" : score >= 0.5 ? "bg-warning" : "bg-fg-muted",
+                )}
+                style={{ width: `${Math.max(2, score * 100)}%` }}
+              />
+            </span>
           </span>
-        </span>
-      );
-    },
-  }),
-  column.accessor("route", {
-    header: "Route",
-    cell: (info) => <RouteBadge route={info.getValue()} />,
-  }),
-];
+        );
+      },
+    }),
+    column.accessor("route", {
+      header: "Route",
+      cell: (info) => <RouteBadge route={info.getValue()} />,
+    }),
+    column.display({
+      id: "inspect",
+      header: "Inspect",
+      cell: (info) => (
+        <button
+          type="button"
+          title="Inspect alert in side panel"
+          aria-label={`Inspect ${info.row.original.transaction_id}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelectAlert?.(info.row.original);
+          }}
+          className={cn(
+            "inline-flex size-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-surface-elevated hover:text-accent",
+            selectedAlertId === info.row.original.transaction_id && "bg-accent-soft text-accent",
+          )}
+        >
+          <Eye className="size-3.5" aria-hidden />
+        </button>
+      ),
+    }),
+  ];
+}
 
 function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   if (direction === "asc") return <ArrowUp className="size-3" aria-hidden />;
@@ -116,13 +146,15 @@ function SortIcon({ direction }: { direction: false | "asc" | "desc" }) {
   return <ChevronsUpDown className="size-3 opacity-50" aria-hidden />;
 }
 
-/**
- * The scored-transaction queue. It fills the height its parent gives it: the
- * header, filters and pager stay put and only the table scrolls. Filters are
- * applied by the API across all scored transactions, not just the loaded page;
- * column sorting reorders the loaded page only.
- */
-export function AlertQueue({ className }: { className?: string }) {
+export function AlertQueue({
+  className,
+  selectedAlertId,
+  onSelectAlert,
+}: {
+  className?: string;
+  selectedAlertId?: string | null;
+  onSelectAlert?: (alert: AlertItem | null) => void;
+}) {
   const router = useRouter();
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState(0);
@@ -141,6 +173,11 @@ export function AlertQueue({ className }: { className?: string }) {
         rank: (alerts.data?.offset ?? 0) + index + 1,
       })),
     [alerts.data],
+  );
+
+  const columns = useMemo(
+    () => buildColumns(onSelectAlert, selectedAlertId),
+    [onSelectAlert, selectedAlertId],
   );
 
   // TanStack Table returns new function references by design; the React
@@ -167,6 +204,23 @@ export function AlertQueue({ className }: { className?: string }) {
     setPage(0);
   };
 
+  const applyPreset = (preset: "all" | "critical" | "review" | "blocked") => {
+    switch (preset) {
+      case "all":
+        changeFilters(EMPTY_DRAFT);
+        break;
+      case "critical":
+        changeFilters({ ...EMPTY_DRAFT, minScore: "0.85" });
+        break;
+      case "review":
+        changeFilters({ ...EMPTY_DRAFT, routes: ["flagged_for_review"] });
+        break;
+      case "blocked":
+        changeFilters({ ...EMPTY_DRAFT, routes: ["blocked_by_rule"] });
+        break;
+    }
+  };
+
   return (
     <section
       aria-labelledby="queue-heading"
@@ -177,7 +231,7 @@ export function AlertQueue({ className }: { className?: string }) {
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
-          <h2 id="queue-heading" className="text-sm font-semibold">
+          <h2 id="queue-heading" className="text-sm font-semibold text-fg">
             Alert queue
           </h2>
           <p className="text-xs text-fg-muted">
@@ -188,7 +242,63 @@ export function AlertQueue({ className }: { className?: string }) {
               : "Highest score first"}
           </p>
         </div>
-        <TransactionLookup />
+
+        <div className="flex items-center gap-2">
+          {/* Quick preset chips */}
+          <div
+            className="hidden items-center gap-1 sm:flex"
+            role="group"
+            aria-label="Quick presets"
+          >
+            <button
+              type="button"
+              onClick={() => applyPreset("all")}
+              className={cn(
+                "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                activeCount === 0 ? "bg-surface-elevated text-fg" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("critical")}
+              className={cn(
+                "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                draft.minScore === "0.85"
+                  ? "bg-critical/20 text-critical"
+                  : "text-fg-muted hover:text-critical",
+              )}
+            >
+              Score 0.85+
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("review")}
+              className={cn(
+                "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                draft.routes.length === 1 && draft.routes[0] === "flagged_for_review"
+                  ? "bg-warning/20 text-warning"
+                  : "text-fg-muted hover:text-warning",
+              )}
+            >
+              Review
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset("blocked")}
+              className={cn(
+                "rounded px-2 py-1 text-2xs font-medium transition-colors",
+                draft.routes.length === 1 && draft.routes[0] === "blocked_by_rule"
+                  ? "bg-critical/20 text-critical"
+                  : "text-fg-muted hover:text-critical",
+              )}
+            >
+              Rule block
+            </button>
+          </div>
+          <TransactionLookup />
+        </div>
       </header>
 
       <AlertFilterBar
@@ -229,14 +339,16 @@ export function AlertQueue({ className }: { className?: string }) {
                         }
                         className="sticky top-0 z-10 bg-surface px-4 py-2 text-xs font-medium text-fg-muted shadow-[inset_0_-1px_0_var(--border)]"
                       >
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex items-center gap-1 rounded-sm hover:text-fg"
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          <SortIcon direction={sorted} />
-                        </button>
+                        {header.isPlaceholder ? null : (
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="inline-flex items-center gap-1 rounded-sm hover:text-fg"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {header.column.getCanSort() ? <SortIcon direction={sorted} /> : null}
+                          </button>
+                        )}
                       </th>
                     );
                   })}
@@ -254,19 +366,25 @@ export function AlertQueue({ className }: { className?: string }) {
                       ))}
                     </tr>
                   ))
-                : visible.map((row) => (
-                    <tr
-                      key={row.id}
-                      onClick={() => router.push(investigationHref(row.original.transaction_id))}
-                      className="cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-elevated"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-2">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                : visible.map((row) => {
+                    const isSelected = selectedAlertId === row.original.transaction_id;
+                    return (
+                      <tr
+                        key={row.id}
+                        onClick={() => router.push(investigationHref(row.original.transaction_id))}
+                        className={cn(
+                          "cursor-pointer border-b border-border/60 transition-colors last:border-b-0 hover:bg-surface-elevated",
+                          isSelected && "bg-surface-elevated ring-1 ring-accent/40 ring-inset",
+                        )}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-4 py-2">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
             </tbody>
           </table>
           {!alerts.isPending && visible.length === 0 ? (

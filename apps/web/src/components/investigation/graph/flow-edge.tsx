@@ -37,6 +37,16 @@ export const FlowEdge = memo(function FlowEdge({
       {/* pathLength=1 lets CSS draw a newly discovered edge from source to
           target with one dash, whatever its real length. */}
       <path id={id} d={path} pathLength={1} fill="none" className="react-flow__edge-path" />
+      {/* Animated money-flow pulse traveling along the transfer wire */}
+      <path
+        d={path}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth={1.5}
+        strokeDasharray="3 14"
+        className="pointer-events-none [animation:flow_2.6s_linear_infinite] opacity-40"
+        aria-hidden
+      />
       <path
         d={path}
         fill="none"

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, List, Waypoints, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, List, Play, Waypoints, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
@@ -40,6 +40,17 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
   const [bounds, setBounds] = useState<ReviewBounds>(DEFAULT_REVIEW_BOUNDS);
   const [selection, setSelection] = useState<Selection>(null);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyTransactionId = async () => {
+    try {
+      await navigator.clipboard.writeText(transactionId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable
+    }
+  };
 
   const { state, streaming, pending, start, stop, showAll } = review;
   const { graph, positions, latest, items, runs } = state;
@@ -85,14 +96,32 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
           >
             <ArrowLeft className="size-3.5" aria-hidden /> Alert queue
           </Link>
-          <h1 className="mt-1.5 text-base font-semibold">
-            <span className="sr-only">Agent review of </span>
-            <Mono>{transactionId}</Mono>
-          </h1>
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <h1 className="flex items-center gap-2 text-base font-semibold">
+              <span className="sr-only">Agent review of </span>
+              <Mono>{transactionId}</Mono>
+              <button
+                type="button"
+                onClick={copyTransactionId}
+                aria-label="Copy transaction ID"
+                className="rounded p-1 text-fg-muted hover:bg-surface-elevated hover:text-fg"
+              >
+                {copied ? (
+                  <Check className="size-3.5 text-safe" aria-hidden />
+                ) : (
+                  <Copy className="size-3.5" aria-hidden />
+                )}
+              </button>
+            </h1>
+            {started ? (
+              <span className="font-mono text-sm font-bold text-fg">
+                Score {formatScore(started.risk_score)}
+              </span>
+            ) : null}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-secondary">
             {started ? (
               <>
-                <span>Score {formatScore(started.risk_score)}</span>
                 <Badge tone={ROUTE_BADGE[started.route].tone}>
                   {ROUTE_BADGE[started.route].label}
                 </Badge>
@@ -167,13 +196,43 @@ export function AgentReview({ transactionId }: { transactionId: string }) {
           />
         ) : (
           <div data-graph-canvas="" className="flex h-full items-center justify-center p-6">
-            <div className="max-w-xs text-center">
-              <Waypoints className="mx-auto size-6 text-fg-muted" aria-hidden />
-              <p className="mt-2 text-sm text-fg-secondary">
-                {streaming
-                  ? "Waiting for the first query result."
-                  : "The graph grows here as the agent queries FalkorDB."}
-              </p>
+            <div className="max-w-md text-center">
+              {streaming ? (
+                <div className="flex flex-col items-center">
+                  <div className="relative flex size-12 items-center justify-center">
+                    <span className="absolute size-12 animate-ping rounded-full bg-accent/25" />
+                    <span className="size-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-fg">Querying FalkorDB Graph...</p>
+                  <p className="mt-1 text-xs text-fg-secondary">
+                    Traversing transaction paths and counterparties within the bounded window.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border bg-surface/85 p-6 shadow-2xl backdrop-blur">
+                  <div className="mx-auto flex size-11 items-center justify-center rounded-lg border border-accent/40 bg-accent-soft text-accent">
+                    <Waypoints className="size-5" aria-hidden />
+                  </div>
+                  <h2 className="mt-3.5 text-sm font-semibold text-fg">
+                    Graph Investigation Ready
+                  </h2>
+                  <p className="mt-1.5 text-xs leading-relaxed text-fg-secondary">
+                    The agent will execute bounded Cypher queries in FalkorDB (up to{" "}
+                    {bounds.max_hops} hops) to uncover transaction networks, pass-through clearing
+                    hubs, and circular flows.
+                  </p>
+                  <div className="mt-4">
+                    <Button
+                      size="sm"
+                      onClick={() => start(bounds)}
+                      className="inline-flex items-center gap-1.5"
+                    >
+                      <Play className="size-3.5" aria-hidden />
+                      Start Investigation
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
