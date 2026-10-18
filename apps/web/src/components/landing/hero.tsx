@@ -27,7 +27,7 @@ export default function Hero({ onRequestDemo, onContact }: HeroProps) {
                 aria-hidden="true"
                 className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"
               />
-              AI-POWERED AML INVESTIGATIONS
+              AML INVESTIGATION WORKBENCH
             </span>
             <h1
               id="hero-title"
@@ -42,8 +42,9 @@ export default function Hero({ onRequestDemo, onContact }: HeroProps) {
           {/* Right description and action column */}
           <div className="flex flex-col justify-end lg:col-span-5 lg:pb-2 xl:col-span-5">
             <p className="max-w-[44ch] animate-hero-rise text-[15px] leading-7 font-normal text-[#b5b8b4] [animation-delay:120ms] sm:text-[16px]">
-              Tripwire helps analysts detect suspicious transactions, trace hidden money flows, and
-              turn graph evidence into actionable investigations with an AI agent.
+              Score suspicious transfers, let the agent trace the money through bounded Cypher, and
+              read an investigation report where every claim is checked against the records behind
+              it.
             </p>
             <div className="mt-7 flex animate-hero-rise flex-wrap items-center gap-3.5 [animation-delay:200ms]">
               {onRequestDemo ? (
@@ -52,12 +53,12 @@ export default function Hero({ onRequestDemo, onContact }: HeroProps) {
                   onClick={onRequestDemo}
                   className="group inline-flex items-center justify-center gap-2 rounded-full bg-accent px-6 py-3 text-[14px] font-semibold text-accent-ink shadow-[0_14px_40px_-16px_rgba(242,140,56,0.9)] transition-all duration-200 hover:shadow-[0_18px_48px_-14px_rgba(242,140,56,0.95)] hover:brightness-110"
                 >
-                  Request a Demo
+                  Request a demo
                   <CtaArrow />
                 </button>
               ) : (
                 <CtaLink href={DEMO_HREF} size="lg">
-                  Request a Demo
+                  Request a demo
                   <CtaArrow />
                 </CtaLink>
               )}
@@ -82,7 +83,7 @@ export default function Hero({ onRequestDemo, onContact }: HeroProps) {
                 size="md"
                 className="hidden text-[13px] text-dim hover:text-accent xl:inline-flex"
               >
-                Launch Workbench
+                Open the workbench
               </CtaLink>
             </div>
           </div>

@@ -10,7 +10,14 @@ import {
 } from "motion/react";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -18,8 +25,9 @@ import { cn } from "@/lib/cn";
  * StickyTeaserScroll
  *
  * A split-screen section. Text teasers scroll normally on one side while one
- * image panel stays pinned on the other and swaps to the image of the teaser
- * that is currently active.
+ * panel stays pinned on the other and swaps to the panel of the teaser that is
+ * currently active. A panel is either a static `image` or a `visual`, any node
+ * such as the interactive stages the landing page passes in "How it works".
  *
  * Everything is derived from `items`: add or remove an item and nothing else
  * needs touching, because the active teaser comes from an IntersectionObserver
@@ -29,11 +37,13 @@ import { cn } from "@/lib/cn";
  *  - Timing and easing: `SWAP_DURATION` and `EASE` below.
  *  - Where a teaser becomes active: the `activeOffset` prop (0 is the top of
  *    the viewport, 0.5 the middle, 1 the bottom).
- *  - Image shape: the `aspectClassName` prop, any Tailwind `aspect-*` class.
+ *  - Image shape: the `aspectClassName` prop, any Tailwind `aspect-*` class;
+ *    `mobileAspectClassName` does the same for the frame below 992px.
  *  - Height pinned under a fixed header: the `stickyTop` prop, in pixels.
  *
- * Below 992px the pinning is turned off: each teaser stacks with its own image
- * above its text and fades in as it enters.
+ * Below 992px the pinning is turned off: each teaser stacks with its own panel
+ * above its text and fades in as it enters. A panel is rendered twice, once per
+ * breakpoint, and `display: none` keeps the hidden one out of the tab order.
  *
  * Layout comes from CSS (`min-[992px]:` variants) so the first paint is right
  * and nothing shifts. JavaScript only decides which teaser is active.
@@ -47,7 +57,13 @@ export type StickyTeaserItem = {
   href?: string;
   /** Link text for this item; falls back to the component's `linkLabel`. */
   linkLabel?: string;
-  image: { src: string; alt: string };
+  /** Static image, used when the item has no `visual`. */
+  image?: { src: string; alt: string };
+  /**
+   * Custom panel content instead of an image. Takes precedence over `image`
+   * and is used both in the pinned panel and above the text below 992px.
+   */
+  visual?: ReactNode;
 };
 
 export type StickyTeaserScrollProps = {
@@ -60,8 +76,10 @@ export type StickyTeaserScrollProps = {
   scrubbed?: boolean;
   /** Pixels to leave above the pinned panel, for a fixed header. */
   stickyTop?: number;
-  /** Aspect ratio of the pinned image frame. */
+  /** Aspect ratio of the pinned panel. */
   aspectClassName?: string;
+  /** Aspect ratio of the frame above the text below 992px. */
+  mobileAspectClassName?: string;
   /** Default link text for items that have an `href`. */
   linkLabel?: string;
   className?: string;
@@ -89,26 +107,37 @@ function useIsDesktop(): boolean | null {
   );
 }
 
-// ---- Image layers -----------------------------------------------------------
+// ---- Panel layers -----------------------------------------------------------
 
-/** Index-based swap: the incoming image fades and scales in, the outgoing one fades and shrinks. */
+/**
+ * Index-based swap: the incoming panel fades and scales in, the outgoing one
+ * fades and shrinks. Images fill their frame; a `visual` keeps its own layout.
+ */
 function SwapLayer({ item, reduced }: { item: StickyTeaserItem; reduced: boolean }) {
   const transition: Transition = reduced
     ? { duration: 0 }
     : { duration: SWAP_DURATION, ease: EASE };
+  const motionProps = {
+    initial: { opacity: 0, scale: reduced ? 1 : 1.1 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: reduced ? 1 : 0.95 },
+    transition,
+    // will-change lives only on the layers that animate, and they unmount after the swap.
+    style: { willChange: "transform, opacity" },
+    className: "absolute inset-0 size-full",
+  };
+  if (item.visual) {
+    return <motion.div {...motionProps}>{item.visual}</motion.div>;
+  }
+  if (!item.image) return null;
   return (
     <motion.img
       src={item.image.src}
       alt={item.image.alt}
       decoding="async"
       draggable={false}
-      initial={{ opacity: 0, scale: reduced ? 1 : 1.1 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: reduced ? 1 : 0.95 }}
-      transition={transition}
-      // will-change lives only on the layers that animate, and they unmount after the swap.
-      style={{ willChange: "transform, opacity" }}
-      className="absolute inset-0 size-full object-cover"
+      {...motionProps}
+      className={cn(motionProps.className, "object-cover")}
     />
   );
 }
@@ -117,7 +146,7 @@ function SwapLayer({ item, reduced }: { item: StickyTeaserItem; reduced: boolean
  * Scroll-linked layer: opacity and scale follow this teaser's own scroll
  * progress. Progress runs 0 to 1 while the teaser crosses the viewport and is
  * 0.5 when it is centred, so neighbouring teasers always cross-fade to a sum of
- * one. The first image holds until its teaser is centred, and the last holds after.
+ * one. The first panel holds until its teaser is centred, and the last holds after.
  */
 function ScrubbedLayer({
   item,
@@ -137,6 +166,15 @@ function ScrubbedLayer({
   const last = index === count - 1;
   const opacity = useTransform(scrollYProgress, [0, 0.5, 1], [first ? 1 : 0, 1, last ? 1 : 0]);
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [first ? 1 : 1.1, 1, last ? 1 : 0.95]);
+  const style = { opacity, scale, willChange: "transform, opacity" };
+  if (item.visual) {
+    return (
+      <motion.div aria-hidden={!active} style={style} className="absolute inset-0 size-full">
+        {item.visual}
+      </motion.div>
+    );
+  }
+  if (!item.image) return null;
   return (
     <motion.img
       src={item.image.src}
@@ -144,7 +182,7 @@ function ScrubbedLayer({
       aria-hidden={!active}
       decoding="async"
       draggable={false}
-      style={{ opacity, scale, willChange: "transform, opacity" }}
+      style={style}
       className="absolute inset-0 size-full object-cover"
     />
   );
@@ -159,6 +197,7 @@ export function StickyTeaserScroll({
   scrubbed = false,
   stickyTop = 0,
   aspectClassName = "aspect-[4/5]",
+  mobileAspectClassName = "aspect-[4/3]",
   linkLabel = "View project",
   className,
 }: StickyTeaserScrollProps) {
@@ -200,12 +239,13 @@ export function StickyTeaserScroll({
   // Decode every image up front, so a swap never shows an unpainted frame.
   useEffect(() => {
     if (isDesktop !== true) return;
-    const held = items.map((item) => {
+    const held = items.flatMap((item) => {
+      if (!item.image) return [];
       const image = new Image();
       image.decoding = "async";
       image.src = item.image.src;
       image.decode().catch(() => undefined);
-      return image;
+      return [image];
     });
     return () => {
       held.length = 0;
@@ -251,21 +291,25 @@ export function StickyTeaserScroll({
                 "motion-reduce:transition-none min-[992px]:transition-opacity min-[992px]:duration-500 min-[992px]:data-[active=false]:opacity-35",
               )}
             >
-              {/* Below 992px each teaser carries its own image; the pinned panel is hidden. */}
+              {/* Below 992px each teaser carries its own panel; the pinned panel is hidden. */}
               <div
                 className={cn(
                   "mb-7 w-full overflow-hidden rounded-2xl bg-surface-sunken min-[992px]:hidden",
-                  "aspect-[4/3]",
+                  mobileAspectClassName,
                 )}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element -- remote or static, sized by its frame */}
-                <img
-                  src={item.image.src}
-                  alt={item.image.alt}
-                  loading={index === 0 ? "eager" : "lazy"}
-                  decoding="async"
-                  className="size-full object-cover"
-                />
+                {item.visual ? (
+                  <div className="size-full">{item.visual}</div>
+                ) : item.image ? (
+                  /* eslint-disable-next-line @next/next/no-img-element -- remote or static, sized by its frame */
+                  <img
+                    src={item.image.src}
+                    alt={item.image.alt}
+                    loading={index === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                    className="size-full object-cover"
+                  />
+                ) : null}
               </div>
 
               {item.eyebrow ? (
@@ -297,7 +341,7 @@ export function StickyTeaserScroll({
         })}
       </div>
 
-      {/* Pinned image panel: desktop only. */}
+      {/* Pinned panel: desktop only; each panel is an image or a visual node. */}
       <div
         className={cn(
           "hidden min-w-0 self-start min-[992px]:row-start-1 min-[992px]:flex",

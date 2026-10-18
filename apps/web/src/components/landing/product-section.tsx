@@ -137,8 +137,8 @@ const CAPABILITIES: readonly Capability[] = [
       <>
         Transfers are first class: an account <span className="font-mono text-ink/90">SENT</span> a
         transaction that another account <span className="font-mono text-ink/90">RECEIVED</span>.
-        Every node, edge and path on screen is the output of an executed, bounded Cypher query, not
-        a cached image or a guess.
+        Every node, edge and path on screen is the output of an executed, bounded Cypher query. What
+        you see is what the graph returned.
       </>
     ),
     span: "lg:col-span-4",
@@ -146,14 +146,13 @@ const CAPABILITIES: readonly Capability[] = [
   },
   {
     icon: ListChecks,
-    title: "Approved tools only",
+    title: "Three reviewed tools",
     body: (
       <>
-        The agent chooses between three reviewed tools:{" "}
-        <span className="font-mono text-ink/90">trace_funds</span>,{" "}
+        The agent picks among <span className="font-mono text-ink/90">trace_funds</span>,{" "}
         <span className="font-mono text-ink/90">inspect_counterparties</span> and{" "}
-        <span className="font-mono text-ink/90">detect_flow_patterns</span>. Tools return records;
-        the model only proposes what to run next.
+        <span className="font-mono text-ink/90">detect_flow_patterns</span>. Each returns records
+        from the graph; the model only proposes what to run next.
       </>
     ),
     span: "lg:col-span-2",
@@ -161,13 +160,13 @@ const CAPABILITIES: readonly Capability[] = [
   {
     icon: FileCheck,
     title: "Evidence-validated reports",
-    body: "Cited transaction IDs, account keys, amounts and timestamps are checked against what the tools returned. Unsupported claims are rejected before an analyst reads them.",
+    body: "Every cited transaction ID, account key, amount and timestamp is checked against what the tools returned. Unsupported claims are rejected before an analyst reads them.",
     span: "lg:col-span-2",
   },
   {
     icon: Scale,
     title: "Policy decides, humans confirm",
-    body: "Scores and proposals never clear or block on their own. Deterministic policy maps validated inputs to allow or review, with a safe fallback when a model or provider fails.",
+    body: "Deterministic policy maps validated inputs to allow, review or a simulated block, and a failed model or provider falls back to the safe path.",
     span: "lg:col-span-2",
   },
   {
@@ -186,7 +185,7 @@ export default function ProductSection() {
           <SectionHeading
             eyebrow="Product"
             title="Evidence an analyst can defend."
-            description="TraceAML is a workbench, not a black box: every screen answers to a query that ran, and every recommendation carries the records behind it."
+            description="Tripwire is a workbench: every screen answers to a query that ran, and every recommendation carries the records behind it."
           />
         </div>
 

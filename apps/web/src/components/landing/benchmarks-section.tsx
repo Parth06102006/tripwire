@@ -16,7 +16,7 @@ const PROTOCOL = [
     body: "Results include recall at a stated alert budget, because a review team can only work a bounded queue.",
   },
   {
-    title: "Measured, not assumed",
+    title: "Measured end to end",
     body: "P50 and P95 latency, throughput, graph scope and cost per 1,000 decisions are reported after warm-up, with the hardware stated.",
   },
 ] as const;
@@ -33,7 +33,7 @@ export default function BenchmarksSection() {
           <SectionHeading
             eyebrow="Benchmarks"
             title="Numbers with their protocol attached."
-            description="Figures come from the recorded run artifact the API serves, shown next to the conditions that produced them."
+            description="Every figure comes from the recorded run artifact the API serves, next to the conditions that produced it."
           />
         </div>
 

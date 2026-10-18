@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Database, Clock } from "lucide-react";
+import { Play, Database } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { SectionHeading } from "./section-heading";
 
@@ -10,7 +10,6 @@ interface QueryPreset {
   name: string;
   category: string;
   query: string;
-  latencyMs: number;
   resultRows: {
     source: string;
     txId: string;
@@ -24,7 +23,7 @@ interface QueryPreset {
 const PRESETS: readonly [QueryPreset, ...QueryPreset[]] = [
   {
     id: "layering",
-    name: "Trace 3-Hop Layering Route",
+    name: "Trace a Layering Route",
     category: "Fund Tracking",
     query: `MATCH path = (origin:Account {id: 'B0412::A331992'})-[:SENT]->(t1:Transaction)
       -[:RECEIVED]->(mid:Account)-[:SENT]->(t2:Transaction)
@@ -32,7 +31,6 @@ const PRESETS: readonly [QueryPreset, ...QueryPreset[]] = [
 WHERE t1.amount >= 100000.0
 RETURN origin.id, t1.id, mid.id, t2.id, sink.id, t2.amount, t2.timestamp
 LIMIT 5;`,
-    latencyMs: 6.4,
     resultRows: [
       {
         source: "B0412::A331992",
@@ -70,7 +68,6 @@ WHERE inTx.timestamp <= outTx.timestamp
   AND duration.inMinutes(inTx.timestamp, outTx.timestamp).minutes <= 30
   AND outTx.amount >= inTx.amount * 0.90
 RETURN mule.id, inTx.id, outTx.id, outTx.amount, outTx.timestamp;`,
-    latencyMs: 7.8,
     resultRows: [
       {
         source: "B0521::A892110",
@@ -108,7 +105,6 @@ WITH sender, count(tx) AS burstCount, sum(tx.amount) AS aggregated
 WHERE burstCount >= 4
 RETURN sender.id, burstCount, aggregated
 ORDER BY burstCount DESC;`,
-    latencyMs: 5.1,
     resultRows: [
       {
         source: "B0244::A882019",
@@ -161,8 +157,8 @@ export default function CypherSandbox() {
         <div data-reveal>
           <SectionHeading
             eyebrow="Interactive Sandbox"
-            title="Cypher query execution in real time."
-            description="FalkorDB evaluates graph topology directly on synthetic IBM AMLworld data. Run sample Cypher queries and inspect returned transaction records instantly."
+            title="Cypher you can check, row by row."
+            description="Preset Cypher the workbench runs against the synthetic IBM AMLworld replay. Inspect the rows FalkorDB returns, transaction by transaction."
           />
         </div>
 
@@ -213,7 +209,7 @@ export default function CypherSandbox() {
             {/* Cypher editor view */}
             <div className="border-b border-line bg-[#08090a] p-5 sm:p-6 lg:col-span-6 lg:border-r lg:border-b-0">
               <div className="flex items-center justify-between border-b border-line/60 pb-3 text-[11px] text-dim">
-                <span className="font-mono text-accent">Cypher Shell · FalkorDB 1.0</span>
+                <span className="font-mono text-accent">Cypher Shell · FalkorDB</span>
                 <span>Read-Only Evaluation</span>
               </div>
               <pre className="mt-4 overflow-x-auto font-mono text-[12.5px] leading-6 text-[#d0d4d0] selection:bg-accent/30">
@@ -227,12 +223,9 @@ export default function CypherSandbox() {
                 <div className="flex items-center justify-between border-b border-line/60 pb-3 text-[11px] text-dim">
                   <span className="flex items-center gap-1.5 font-medium text-white">
                     <Database aria-hidden="true" className="h-3.5 w-3.5 text-accent" />
-                    Query Execution Result ({currentPreset.resultRows.length} rows)
+                    Returned records ({currentPreset.resultRows.length} rows)
                   </span>
-                  <span className="flex items-center gap-1 font-mono text-safe">
-                    <Clock aria-hidden="true" className="h-3 w-3" />
-                    {currentPreset.latencyMs} ms
-                  </span>
+                  <span className="font-mono text-dim">Recorded result</span>
                 </div>
 
                 <div className="mt-4 overflow-x-auto">
@@ -266,8 +259,10 @@ export default function CypherSandbox() {
               </div>
 
               <div className="mt-5 flex items-center justify-between border-t border-line/60 pt-3 text-[11px] text-dim">
-                <span>Verified by Cypher parser</span>
-                <span className="font-mono text-ink">Zero LLM Hallucination</span>
+                <span>Read-only, human-authored Cypher</span>
+                <span className="font-mono text-ink">
+                  Rows come from the graph, never the model
+                </span>
               </div>
             </div>
           </div>

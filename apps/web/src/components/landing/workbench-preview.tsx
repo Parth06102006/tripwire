@@ -238,7 +238,7 @@ const NODE_DETAILS: Record<string, NodeDetail> & { default: NodeDetail } = {
     to: "B0490::A100944",
     format: "WIRE_TRANSFER",
     summary:
-      "Central routing hub: 99.6% pass-through velocity observed. Inflow received and re-transferred within 18 minutes.",
+      "Central routing hub: inflow received and re-transferred within 20 minutes, with almost the full amount passed on.",
   },
   target: {
     txId: "TX-20220907-111840",
@@ -333,7 +333,7 @@ export default function WorkbenchPreview() {
                       <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-75" />
                       <span className="relative h-1.5 w-1.5 rounded-full bg-accent" />
                     </span>
-                    LIVE INVESTIGATION
+                    SAMPLE INVESTIGATION
                   </span>
                   <h3 className="mt-1 text-[16px] font-semibold tracking-tight text-white">
                     Suspicious Transaction Network
@@ -600,7 +600,7 @@ export default function WorkbenchPreview() {
           href="/overview"
           className="inline-flex items-center gap-1 font-medium text-ink underline decoration-line-strong underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
         >
-          Open live workbench
+          Open the workbench
           <ArrowRight aria-hidden="true" className="h-3 w-3" />
         </Link>
       </figcaption>
