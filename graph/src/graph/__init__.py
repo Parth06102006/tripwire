@@ -1,1 +1,1 @@
-"""TraceAML FalkorDB graph layer: ingestion and bounded investigation queries."""
+"""Tripwire FalkorDB graph layer: ingestion and bounded investigation queries."""

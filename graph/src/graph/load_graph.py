@@ -1,4 +1,4 @@
-"""Idempotent FalkorDB loader for normalized TraceAML transactions.
+"""Idempotent FalkorDB loader for normalized Tripwire transactions.
 
 Reads the normalized Parquet table in streaming batches and materializes
 first-class transfers::
@@ -203,7 +203,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Build the CLI parser and parse arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Idempotently load normalized TraceAML transactions into FalkorDB "
+            "Idempotently load normalized Tripwire transactions into FalkorDB "
             "as (:Account)-[:SENT]->(:Transaction)-[:RECEIVED]->(:Account). "
             "Never reads labels, splits, or typology metadata."
         ),

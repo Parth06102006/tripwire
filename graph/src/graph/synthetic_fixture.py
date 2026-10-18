@@ -1,4 +1,4 @@
-"""Seeded synthetic latency fixture for the TraceAML graph layer.
+"""Seeded synthetic latency fixture for the Tripwire graph layer.
 
 This module writes a Parquet file with exactly the columns and dtypes of the
 normalized ``transactions.parquet`` produced by ``ml/src/ml/prepare_data.py``

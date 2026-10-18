@@ -1,4 +1,4 @@
-# TraceAML Graph (`graph`)
+# Tripwire Graph (`graph`)
 
 uv-managed FalkorDB graph layer. Python >= 3.12. All commands run from the
 repository root with `uv run --project graph`. It covers idempotent

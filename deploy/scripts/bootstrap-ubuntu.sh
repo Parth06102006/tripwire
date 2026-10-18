@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare a fresh Ubuntu 24.04 host (EC2, GCE or Azure VM) for TraceAML.
+# Prepare a fresh Ubuntu 24.04 host (EC2, GCE or Azure VM) for Tripwire.
 # Idempotent: safe to run again. Run as a sudo-capable user:
 #
 #   sudo bash deploy/scripts/bootstrap-ubuntu.sh

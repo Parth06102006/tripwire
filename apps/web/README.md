@@ -1,6 +1,6 @@
-# TraceAML workbench
+# Tripwire workbench
 
-The analyst UI for TraceAML: an alert queue, a graph investigation screen and a performance screen, all reading the FastAPI service. Architecture and screen behaviour are described in [`docs/architecture.md`](../../docs/architecture.md#analyst-workbench); the decision record is ADR-022 in [`docs/decisions.md`](../../docs/decisions.md).
+The analyst UI for Tripwire: an alert queue, a graph investigation screen and a performance screen, all reading the FastAPI service. Architecture and screen behaviour are described in [`docs/architecture.md`](../../docs/architecture.md#analyst-workbench); the decision record is ADR-022 in [`docs/decisions.md`](../../docs/decisions.md).
 
 ## Run it
 
@@ -69,7 +69,7 @@ Better Auth (`src/lib/auth/`) signs users in with Google and GitHub. `src/proxy.
 | `BETTER_AUTH_URL`                                                                      | The public base URL. Becomes the token issuer and audience, so the API's `TRACEAML_AUTH_ISSUER` and `TRACEAML_AUTH_AUDIENCE` must equal it. https in production |
 | `BETTER_AUTH_SECRET`                                                                   | 32 characters or more                                                                                                                                           |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | A provider is enabled when both of its values are set                                                                                                           |
-| `AUTH_ALLOWED_EMAILS`                                                                  | Comma separated addresses and `@domain` entries. `*` lets anyone with a verified email in (a public demo). Empty allows nobody                                                                                            |
+| `AUTH_ALLOWED_EMAILS`                                                                  | Comma separated addresses and `@domain` entries. `*` lets anyone with a verified email in (a public demo). Empty allows nobody                                  |
 | `AUTH_DB_PATH`                                                                         | The sign-in SQLite file. Default `data/auth/auth.db`                                                                                                            |
 
 Local development needs no credentials: put `AUTH_MODE=off` in `apps/web/.env.local` and set `TRACEAML_AUTH_MODE=off` for the API. To try the whole flow locally, run the web app with `AUTH_MODE=dev`, a secret, `AUTH_ALLOWED_EMAILS`, `BETTER_AUTH_URL` set to its own address, and the API with `TRACEAML_AUTH_MODE=jwt`, `TRACEAML_AUTH_JWKS_URL=<web>/api/auth/jwks` and the same issuer and audience.
@@ -82,15 +82,15 @@ The end-to-end tests run with `AUTH_MODE=off` and an API started with `TRACEAML_
 
 It is data-driven: pass `items` (`id`, `title`, `description`, and an `image` or a `visual`, plus optionally `eyebrow`, `href`, `linkLabel`) and nothing else changes when items are added or removed. Pass a stable array, such as a module constant, so the observer is not rebuilt on every render. Below 992px the panel is rendered again above the teaser text, and `display: none` keeps the hidden copy out of the tab order.
 
-| To change                     | Do this                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Swap timing or easing         | Edit `SWAP_DURATION` and `EASE` at the top of the component.                                                             |
-| Where a teaser becomes active | Set `activeOffset` (0 is the top of the viewport, 0.5 the middle, 1 the bottom). The default is 0.5.                     |
-| Panel shape                   | Set `aspectClassName`, for example `aspect-square` or `aspect-[3/4]`. The default is `aspect-[4/5]`.                     |
+| To change                      | Do this                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Swap timing or easing          | Edit `SWAP_DURATION` and `EASE` at the top of the component.                                                                   |
+| Where a teaser becomes active  | Set `activeOffset` (0 is the top of the viewport, 0.5 the middle, 1 the bottom). The default is 0.5.                           |
+| Panel shape                    | Set `aspectClassName`, for example `aspect-square` or `aspect-[3/4]`. The default is `aspect-[4/5]`.                           |
 | Frame above the text on phones | Set `mobileAspectClassName`. It takes any Tailwind class, such as `aspect-[4/5] min-h-[30rem]`. The default is `aspect-[4/3]`. |
-| Pin below a fixed header      | Set `stickyTop` in pixels. The landing page passes the 72px header height.                                               |
-| Scroll-scrubbed crossfade     | Set `scrubbed`. Opacity and scale then follow each teaser's own scroll progress instead of swapping on the active index. |
-| Panel side                    | Set `imageSide` to `"left"` or `"right"`.                                                                                 |
+| Pin below a fixed header       | Set `stickyTop` in pixels. The landing page passes the 72px header height.                                                     |
+| Scroll-scrubbed crossfade      | Set `scrubbed`. Opacity and scale then follow each teaser's own scroll progress instead of swapping on the active index.       |
+| Panel side                     | Set `imageSide` to `"left"` or `"right"`.                                                                                      |
 
 Pinning needs the page to be the scroll container, so no ancestor may set `overflow: hidden`, `auto` or `scroll`. Use `overflow-x: clip` to stop sideways scroll. Below 992px the pinning is off and each teaser shows its own panel above its text.
 

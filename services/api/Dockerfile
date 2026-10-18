@@ -1,4 +1,4 @@
-# Multi-stage image for the TraceAML API (entrypoint api.app:app).
+# Multi-stage image for the Tripwire API (entrypoint api.app:app).
 #
 # Build from the repository root so the local traceaml-graph path dependency
 # (../../graph) is inside the build context:

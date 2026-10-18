@@ -1,5 +1,5 @@
 /**
- * Runtime schemas for the TraceAML API, mirroring the Pydantic models in
+ * Runtime schemas for the Tripwire API, mirroring the Pydantic models in
  * services/api/src/api/schemas.py and services/api/src/api/cases/schemas.py.
  * Those models are the authority; update these when they change.
  *

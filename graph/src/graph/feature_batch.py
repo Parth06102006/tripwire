@@ -1,4 +1,4 @@
-"""Vectorized offline point-in-time graph features for TraceAML.
+"""Vectorized offline point-in-time graph features for Tripwire.
 
 Produces exactly the same five ``gfeat_*`` columns, with exactly the same
 point-in-time semantics, as the FalkorDB streaming builder

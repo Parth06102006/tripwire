@@ -42,7 +42,7 @@ def render_markdown(results: dict[str, Any]) -> str:
     env = results["environment"]
     hw = env["hardware"]
     lines = [
-        f"# TraceAML benchmark run {results['run_id']}",
+        f"# Tripwire benchmark run {results['run_id']}",
         "",
         ("Synthetic IBM AMLworld HI-Small v8 data on local hardware. These numbers describe "
         "this implementation and host, not real-world AML performance or production capacity."),

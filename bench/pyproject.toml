@@ -1,7 +1,7 @@
 [project]
 name = "traceaml-bench"
 version = "0.1.0"
-description = "TraceAML reproducible latency, capacity, and cost benchmark suite."
+description = "Tripwire reproducible latency, capacity, and cost benchmark suite."
 requires-python = ">=3.12"
 dependencies = [
     "traceaml-api",

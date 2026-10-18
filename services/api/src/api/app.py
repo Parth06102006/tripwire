@@ -1,4 +1,4 @@
-"""Typed FastAPI application for the TraceAML API service.
+"""Typed FastAPI application for the Tripwire API service.
 
 This module is the single service entrypoint (``api.app:app``), used by
 ``make dev-api``, the README commands, and the container image.
@@ -121,7 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await case_db.close()
         close_graph_pools()
 
-    app = FastAPI(title="TraceAML API", version=resolved.app_version, lifespan=lifespan)
+    app = FastAPI(title="Tripwire API", version=resolved.app_version, lifespan=lifespan)
     app.state.settings = resolved
     app.state.case_db = case_db
     app.state.token_verifier = verifier

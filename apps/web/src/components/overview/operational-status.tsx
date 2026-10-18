@@ -14,7 +14,7 @@ export function OperationalStatus() {
   return (
     <Panel
       title="System Telemetry"
-      description={health.data ? `TraceAML Core v${health.data.version}` : "Polled every 30s"}
+      description={health.data ? `Tripwire Core v${health.data.version}` : "Polled every 30s"}
     >
       <div className="space-y-4">
         {/* Service connection strip */}

@@ -167,7 +167,7 @@ export function OverviewKpis() {
         failed={health.isError}
       >
         <div className="flex items-center justify-between text-2xs text-fg-muted">
-          <span>{health.data?.version ? `API v${health.data.version}` : "TraceAML engine"}</span>
+          <span>{health.data?.version ? `API v${health.data.version}` : "Tripwire engine"}</span>
           <span className="font-mono">
             {health.data?.llm === "configured" ? "Agent active" : "Deterministic"}
           </span>

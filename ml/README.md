@@ -1,4 +1,4 @@
-# TraceAML ML (`ml`)
+# Tripwire ML (`ml`)
 
 uv-managed offline evaluation project. Python >= 3.12. All commands run from
 the repository root with `uv run --project ml`. It covers source profiling,

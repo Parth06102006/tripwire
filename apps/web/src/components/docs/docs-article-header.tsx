@@ -66,7 +66,7 @@ export function DocsArticleHeader({ theme, onToggleTheme, claps, onClap }: DocsA
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-fg">TraceAML Intelligence Team</span>
+              <span className="text-sm font-semibold text-fg">Tripwire Intelligence Team</span>
               <span className="text-3xs rounded bg-surface px-1.5 py-0.5 font-medium text-accent">
                 Core
               </span>

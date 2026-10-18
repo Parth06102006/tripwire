@@ -1,6 +1,6 @@
-# TraceAML
+# Tripwire
 
-TraceAML is a graph-powered AML detection and investigation workbench built for reproducible experiments on IBM AMLworld HI-Small. The repository is named Tripwire. The product replays synthetic transactions, compares classical and graph-enhanced models, retrieves bounded evidence from FalkorDB, and presents investigations for human review.
+Tripwire is a graph-powered AML detection and investigation workbench built for reproducible experiments on IBM AMLworld HI-Small. The repository is named Tripwire. The product replays synthetic transactions, compares classical and graph-enhanced models, retrieves bounded evidence from FalkorDB, and presents investigations for human review.
 
 The local workspace contains IBM AMLworld HI-Small Kaggle version 8 under `data/raw/hi-small/`. Dataset files are ignored by Git and are not included in this repository. Do not commit raw data, processed tables, credentials, or generated models.
 
@@ -17,7 +17,7 @@ compose.yaml    Local FalkorDB service
 
 ## Deployment
 
-To run TraceAML on a server (AWS EC2 step by step, plus ECS, Google Cloud and Azure), see [docs/deployment.md](docs/deployment.md). The production stack is `deploy/compose.prod.yaml`.
+To run Tripwire on a server (AWS EC2 step by step, plus ECS, Google Cloud and Azure), see [docs/deployment.md](docs/deployment.md). The production stack is `deploy/compose.prod.yaml`.
 
 ## Requirements
 
@@ -130,4 +130,4 @@ See [architecture](docs/architecture.md), [API and graph contracts](docs/contrac
 
 For the full planning context, implementation summary, benchmark interpretation, and remaining work, see [the project history and Iteration 1 summary](docs/project-history-and-iteration-1-summary.md).
 
-Implementation reference: [Tracer AML Graph Intelligence](docs/research/tracer-aml-reference.md). Its public results use a different account-level split and are not TraceAML benchmark results.
+Implementation reference: [Tracer AML Graph Intelligence](docs/research/tracer-aml-reference.md). Its public results use a different account-level split and are not Tripwire benchmark results.

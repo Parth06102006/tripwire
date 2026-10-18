@@ -1,4 +1,4 @@
-# TraceAML production stack for a single host (EC2, GCE, Azure VM).
+# Tripwire production stack for a single host (EC2, GCE, Azure VM).
 #
 #   docker compose -f deploy/compose.prod.yaml --env-file deploy/.env.production up -d --build
 #
